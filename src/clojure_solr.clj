@@ -58,8 +58,8 @@
     (let [results (.getResults (.query *connection* query method))]
       (with-meta (map doc-to-hash results)
         {:start (.getStart results)
-         :rows (count results)
-         :num-found (.getNumFound results)}))))
+         :rows-this-query (count results)
+         :rows-total (.getNumFound results)}))))
 
 (defn delete-id! [id]
   (.deleteById *connection* id))
