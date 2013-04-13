@@ -55,7 +55,11 @@
         method (parse-method method)]
     (doseq [[key value] (dissoc flags :method)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
-    (map doc-to-hash (.getResults (.query *connection* query method)))))
+    (let [results (.getResults (.query *connection* query method))]
+      (with-meta (map doc-to-hash results)
+        {:start (.getStart results)
+         :rows (count results)
+         :num-found (.getNumFound results)}))))
 
 (defn delete-id! [id]
   (.deleteById *connection* id))
