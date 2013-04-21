@@ -50,16 +50,34 @@
 (defn- parse-method [method]
   (get http-methods method SolrRequest$METHOD/GET))
 
-(defn search [q & {:keys [method] :as flags}]
+(defn extract-facets
+  [query-results limiting?]
+  (map (fn [f] {:name (.getName f)
+             :values (map (fn [v]
+                          {:name (.getName v)
+                           :count (.getCount v)
+                           :filter-query (.getAsFilterQuery v)})
+                        (.getValues f))})
+     (if limiting?
+       (.getLimitingFacets query-results)
+       (.getFacetFields query-results))))
+
+(defn search [q & {:keys [method facet-fields] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)]
-    (doseq [[key value] (dissoc flags :method)]
+    (doseq [[key value] (dissoc flags :method :facet-fields)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
-    (let [results (.getResults (.query *connection* query method))]
+    (.addFacetField query (into-array String (map name facet-fields)))
+    (let [query-results (.query *connection* query method)
+          results (.getResults query-results)]
       (with-meta (map doc-to-hash results)
         {:start (.getStart results)
          :rows-set (count results)
-         :rows-total (.getNumFound results)}))))
+         :rows-total (.getNumFound results)
+         :facet-fields (extract-facets query-results false)
+         :limiting-facet-fields (extract-facets query-results true)
+         :results-obj results
+         :query-results-obj query-results}))))
 
 (defn delete-id! [id]
   (.deleteById *connection* id))
