@@ -3,3 +3,5 @@
 lib/
 .cake/
 pom.xml
+test-files/data
+test-files/dist
