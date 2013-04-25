@@ -1,4 +1,5 @@
 (ns clojure-solr
+  (:require [clojure.string :as str])
   (:import (org.apache.solr.client.solrj.impl HttpSolrServer)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
@@ -36,7 +37,10 @@
   (.commit *connection*))
 
 (defn- doc-to-hash [doc]
-  (clojure.lang.PersistentArrayMap/create doc))
+  (into {} (for [[k v] (clojure.lang.PersistentArrayMap/create doc)]
+             [(keyword k)
+              (cond (= java.util.ArrayList (type v)) (into [] v)
+                    :else v)])))
 
 (defn- make-param [p]
   (cond
@@ -45,24 +49,28 @@
    :else (into-array String [(str p)])))
 
 (def http-methods {:get SolrRequest$METHOD/GET, :GET SolrRequest$METHOD/GET
-              :post SolrRequest$METHOD/POST, :POST SolrRequest$METHOD/POST})
+                   :post SolrRequest$METHOD/POST, :POST SolrRequest$METHOD/POST})
 
 (defn- parse-method [method]
   (get http-methods method SolrRequest$METHOD/GET))
 
 (defn extract-facets
-  [query-results limiting?]
+  [query-results facet-hier-sep limiting?]
   (map (fn [f] {:name (.getName f)
-             :values (map (fn [v]
-                          {:name (.getName v)
-                           :count (.getCount v)
-                           :filter-query (.getAsFilterQuery v)})
-                        (.getValues f))})
+             :values (sort-by :path
+                              (map (fn [v]
+                                   (let [split-path (str/split (.getName v) facet-hier-sep)]
+                                     {:path (.getName v)
+                                      :split-path split-path
+                                      :name (last split-path)
+                                      :depth (count split-path)
+                                      :count (.getCount v)}))
+                                 (.getValues f)))})
      (if limiting?
        (.getLimitingFacets query-results)
        (.getFacetFields query-results))))
 
-(defn search [q & {:keys [method facet-fields] :as flags}]
+(defn search [q & {:keys [method facet-fields facet-hier-sep] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)]
     (doseq [[key value] (dissoc flags :method :facet-fields)]
@@ -74,8 +82,8 @@
         {:start (.getStart results)
          :rows-set (count results)
          :rows-total (.getNumFound results)
-         :facet-fields (extract-facets query-results false)
-         :limiting-facet-fields (extract-facets query-results true)
+         :facet-fields (extract-facets query-results facet-hier-sep false)
+         :limiting-facet-fields (extract-facets query-results facet-hier-sep true)
          :results-obj results
          :query-results-obj query-results}))))
 
