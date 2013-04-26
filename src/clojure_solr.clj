@@ -70,18 +70,23 @@
        (.getLimitingFacets query-results)
        (.getFacetFields query-results))))
 
-(defn search [q & {:keys [method facet-fields facet-hier-sep] :as flags}]
+(defn search [q & {:keys [method facet-fields facet-hier-sep facet-filters] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)]
-    (doseq [[key value] (dissoc flags :method :facet-fields)]
+    (doseq [[key value] (dissoc flags :method :facet-fields :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (.addFacetField query (into-array String (map name facet-fields)))
+    (.addFilterQuery query (into-array String (map (fn [{:keys [name value]}]
+                                                   (format "{!raw f=%s}%s" name value))
+                                                 facet-filters)))
+    (.setFacetMinCount query 1)
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
       (with-meta (map doc-to-hash results)
         {:start (.getStart results)
          :rows-set (count results)
          :rows-total (.getNumFound results)
+         :highlighting (.getHighlighting query-results)
          :facet-fields (extract-facets query-results facet-hier-sep false)
          :limiting-facet-fields (extract-facets query-results facet-hier-sep true)
          :results-obj results
