@@ -92,6 +92,15 @@
          :results-obj results
          :query-results-obj query-results}))))
 
+(defn similar [doc similar-count & {:keys [method]}]
+  (let [query (SolrQuery. (format "id:%d" (:id doc)))
+        method (parse-method method)]
+    (.setParam query "mlt" (make-param true))
+    (.setParam query "mlt.fl" (make-param "fulltext"))
+    (.setParam query "mlt.count" (make-param similar-count))
+    (let [query-results (.query *connection* query method)]
+      (map doc-to-hash (.get (.get (.getResponse query-results) "moreLikeThis") (str (:id doc)))))))
+
 (defn delete-id! [id]
   (.deleteById *connection* id))
 
