@@ -1,6 +1,6 @@
 (ns clojure-solr-test
   (:import (org.apache.solr.client.solrj.embedded EmbeddedSolrServer))
-  (:import (org.apache.solr.core CoreContainer CoreContainer$Initializer))
+  (:import (org.apache.solr.core CoreContainer))
   (:use [clojure.test])
   (:use [clojure-solr]))
 
@@ -9,8 +9,8 @@
   (System/setProperty "solr.solr.home" "test-files")
   (System/setProperty "solr.dist.dir" (str (System/getProperty "user.dir")
                                            "/test-files/dist"))
-  (let [init (CoreContainer$Initializer.)
-        cont (.initialize init)]
+  (let [cont (CoreContainer.)]
+    (.load cont)
     (binding [*connection* (EmbeddedSolrServer. cont "clojure-solr")]
       (f)
       (.shutdown *connection*))))
