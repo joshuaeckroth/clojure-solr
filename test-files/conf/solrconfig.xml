@@ -28,8 +28,6 @@
 
   <jmx />
 
-  <lib dir="${solr.dist.dir}" regex="solr-dataimporthandler-.*\.jar" />
-
   <!-- <indexConfig> section could go here, but we want the defaults -->
 
   <!-- the default high-performance update handler -->
@@ -308,12 +306,6 @@
        <str name="mlt.fl">manu,cat</str>
        <int name="mlt.mindf">1</int>
      </lst>
-   </requestHandler>
-
-   <requestHandler name="/dataimport" class="org.apache.solr.handler.dataimport.DataImportHandler">
-    <lst name="defaults">
-    	<str name="config">solr-data-config.xml</str>
-    </lst>
    </requestHandler>
 
   <!--
