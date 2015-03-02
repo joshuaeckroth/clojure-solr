@@ -1,5 +1,8 @@
 (ns clojure-solr
   (:require [clojure.string :as str])
+  (:require [clj-time.core :as t])
+  (:require [clj-time.format :as tformat])
+  (:require [clj-time.coerce :as tcoerce])
   (:import (org.apache.solr.client.solrj.impl HttpSolrServer)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
@@ -69,18 +72,38 @@
        (.getLimitingFacets query-results)
        (.getFacetFields query-results))))
 
+(def date-time-formatter
+  (tformat/formatters :date-time))
+
+(defn format-range-value
+  [val]
+  (cond (instance? java.util.Date val)
+        (tformat/unparse date-time-formatter (tcoerce/from-date val))
+        :else (str val)))
+
 (defn extract-facet-ranges
   [query-results]
   (sort-by :name
            (map (fn [r]
-                  (let [values (vec (sort-by :value (map (fn [v] {:title (.getValue v) :count (.getCount v)}) (.getCounts r))))
+                  (let [values (sort-by :value (map (fn [v] {:orig-value (.getValue v)
+                                                             :count (.getCount v)})
+                                                    (.getCounts r)))
                         values-facet-queries
                         (map (fn [i val]
-                               (assoc val :value (-> (format "[%s TO %s]"
-                                                             (if (= i 0)
-                                                               "*"
-                                                               (:title (nth values (dec i))))
-                                                             (:title val)))))
+                               (assoc val
+                                 :value (format "[%s TO %s]"
+                                                (if (= i 0)
+                                                  (format-range-value (.getStart r))
+                                                  (:orig-value val))
+                                                (if (= i (dec (count values)))
+                                                  (format-range-value (.getEnd r))
+                                                  (:orig-value (nth values (inc i)))))
+                                 :min-inclusive (if (= i 0)
+                                                  (format-range-value (.getStart r))
+                                                  (:orig-value val))
+                                 :max-noninclusive (if (= i (dec (count values)))
+                                                     (format-range-value (.getEnd r))
+                                                     (:orig-value (nth values (inc i))))))
                              (range (count values)) values)]
                     {:name   (.getName r)
                      :values values-facet-queries

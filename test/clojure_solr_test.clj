@@ -6,8 +6,18 @@
   (:use [clojure.test])
   (:use [clojure-solr]))
 
+;; from: https://gist.github.com/edw/5128978
+(defn delete-recursively [fname]
+  (let [func (fn [func f]
+               (when (.isDirectory f)
+                 (doseq [f2 (.listFiles f)]
+                   (func func f2)))
+               (clojure.java.io/delete-file f))]
+    (func func (clojure.java.io/file fname))))
+
 (defn solr-server-fixture
   [f]
+  (delete-recursively "test-files/data")
   (System/setProperty "solr.solr.home" "test-files")
   (System/setProperty "solr.dist.dir" (str (System/getProperty "user.dir")
                                            "/test-files/dist"))
@@ -39,19 +49,43 @@
             {:value "Vocabulary 2/Term X" :split-path ["Vocabulary 2" "Term X"] :title "Term X" :depth 2 :count 1}
             {:value "Vocabulary 2/Term X/Term Y" :split-path ["Vocabulary 2" "Term X" "Term Y"] :title "Term Y" :depth 3 :count 1}]}]
          (:facet-fields
-           (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/")))))
-  (is (= [{:name   "numeric"
-           :values [{:value "[* TO 10]" :title "10" :count 1}]
-           :start  10
-           :end    12
-           :gap    1}
+           (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
+
+(deftest test-facet-ranges
+  (do (add-document! sample-doc)
+      (add-document! (assoc sample-doc :id "2" :numeric 11))
+      (add-document! (assoc sample-doc :id "3" :numeric 11))
+      (commit!))
+  (is (= [{:name "numeric",
+           :values
+                  [{:max-noninclusive "11",
+                    :min-inclusive    "9",
+                    :value            "[9 TO 11]",
+                    :orig-value       "10",
+                    :count            1}
+                   {:max-noninclusive "12"
+                    :min-inclusive    "11",
+                    :value            "[11 TO 12]",
+                    :orig-value       "11",
+                    :count            2}],
+           :start 9,
+           :end   12,
+           :gap   1}
           {:name   "updated"
-           :values [{:value "[* TO 2015-02-27T00:00:00Z]" :title "2015-02-27T00:00:00Z" :count 1}]
+           :values [{:max-noninclusive "2015-02-28T00:00:00.000Z"
+                     :min-inclusive "2015-02-26T00:00:00.000Z"
+                     :value "[2015-02-26T00:00:00.000Z TO 2015-02-28T00:00:00.000Z]",
+                     :orig-value "2015-02-27T00:00:00Z",
+                     :count 3}]
            :start  (tcoerce/to-date (t/date-time 2015 02 26))
            :end    (tcoerce/to-date (t/date-time 2015 02 28))
            :gap    "+1DAY"}]
          (:facet-range-fields
-           (meta (search "my" :facet-numeric-ranges [{:field "numeric" :start (Integer. 10) :end (Integer. 12) :gap (Integer. 1)}]
+           (meta (search "my"
+                         :facet-numeric-ranges [{:field "numeric"
+                                                 :start (Integer. 9)
+                                                 :end (Integer. 12)
+                                                 :gap (Integer. 1)}]
                          :facet-date-ranges [{:field "updated"
                                               :start (tcoerce/to-date (t/date-time 2015 02 26))
                                               :end   (tcoerce/to-date (t/date-time 2015 02 28))
