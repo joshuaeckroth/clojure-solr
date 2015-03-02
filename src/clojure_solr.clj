@@ -117,11 +117,12 @@
     (.addFacetField query (into-array String (map name facet-fields)))
     (doseq [{:keys [field start end gap]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap))
-    (doseq [{:keys [field start end gap]} facet-numeric-ranges]
+    (doseq [{:keys [field start end gap others]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
       (assert (instance? Number gap))
-      (.addNumericRangeFacet query field start end gap))
+      (.addNumericRangeFacet query field start end gap)
+      (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others))))
     (.addFilterQuery query (into-array String (map (fn [{:keys [name value]}]
                                                      (if (re-find #"\[" value) ;; range filter
                                                        (format "%s:%s" name value)

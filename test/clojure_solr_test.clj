@@ -85,7 +85,8 @@
                          :facet-numeric-ranges [{:field "numeric"
                                                  :start (Integer. 9)
                                                  :end (Integer. 12)
-                                                 :gap (Integer. 1)}]
+                                                 :gap (Integer. 1)
+                                                 :others ["before" "after"]}]
                          :facet-date-ranges [{:field "updated"
                                               :start (tcoerce/to-date (t/date-time 2015 02 26))
                                               :end   (tcoerce/to-date (t/date-time 2015 02 28))
