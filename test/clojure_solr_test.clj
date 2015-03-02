@@ -55,30 +55,40 @@
   (do (add-document! sample-doc)
       (add-document! (assoc sample-doc :id "2" :numeric 11))
       (add-document! (assoc sample-doc :id "3" :numeric 11))
+      (add-document! (assoc sample-doc :id "4" :numeric 15))
+      (add-document! (assoc sample-doc :id "5" :numeric 8))
       (commit!))
   (is (= [{:name "numeric",
            :values
-                  [{:max-noninclusive "11",
-                    :min-inclusive    "10",
-                    :value            "[10 TO 11]",
-                    :orig-value       "10",
-                    :count            1}
-                   {:max-noninclusive "12"
-                    :min-inclusive    "11",
-                    :value            "[11 TO 12]",
-                    :orig-value       "11",
-                    :count            2}],
+                   [{:count 1,
+                     :value "[* TO 10]",
+                     :min-inclusive nil,
+                     :max-noninclusive "10"}
+                    {:max-noninclusive "11",
+                     :min-inclusive "10",
+                     :value "[10 TO 11]",
+                     :orig-value "10",
+                     :count 1}
+                    {:max-noninclusive "12",
+                     :min-inclusive "11",
+                     :value "[11 TO 12]",
+                     :orig-value "11",
+                     :count 2}
+                    {:count 1,
+                     :value "[11 TO *]",
+                     :min-inclusive "11",
+                     :max-noninclusive nil}],
            :start 9,
-           :end   12,
-           :gap   1
-           :before 0
-           :after  0}
+           :end 12,
+           :gap 1,
+           :before 1,
+           :after 1}
           {:name   "updated"
            :values [{:max-noninclusive "2015-02-28T00:00:00.000Z"
                      :min-inclusive "2015-02-27T00:00:00Z"
                      :value "[2015-02-27T00:00:00Z TO 2015-02-28T00:00:00.000Z]",
                      :orig-value "2015-02-27T00:00:00Z",
-                     :count 3}]
+                     :count 5}]
            :start  (tcoerce/to-date (t/date-time 2015 02 26))
            :end    (tcoerce/to-date (t/date-time 2015 02 28))
            :gap    "+1DAY"

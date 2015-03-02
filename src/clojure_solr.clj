@@ -100,9 +100,23 @@
                                  :max-noninclusive (if (= i (dec (count values)))
                                                      (format-range-value (.getEnd r))
                                                      (:orig-value (nth values (inc i))))))
-                             (range (count values)) values)]
+                             (range (count values)) values)
+                        values-before (if (and (.getBefore r) (> (.getBefore r) 0))
+                                        (concat [{:count (.getBefore r)
+                                                  :value (format "[* TO %s]" (:orig-value (first values)))
+                                                  :min-inclusive nil
+                                                  :max-noninclusive (:orig-value (first values))}]
+                                                values-facet-queries)
+                                        values-facet-queries)
+                        values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
+                                              (concat values-before
+                                                      [{:count (.getAfter r)
+                                                        :value (format "[%s TO *]" (:orig-value (last values)))
+                                                        :min-inclusive (:orig-value (last values))
+                                                        :max-noninclusive nil}])
+                                              values-before)]
                     {:name   (.getName r)
-                     :values values-facet-queries
+                     :values values-before-after
                      :start  (.getStart r)
                      :end    (.getEnd r)
                      :gap    (.getGap r)
