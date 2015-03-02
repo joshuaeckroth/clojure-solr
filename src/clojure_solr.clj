@@ -105,7 +105,9 @@
                      :values values-facet-queries
                      :start  (.getStart r)
                      :end    (.getEnd r)
-                     :gap    (.getGap r)}))
+                     :gap    (.getGap r)
+                     :before (.getBefore r)
+                     :after  (.getAfter r)}))
                 (.getFacetRanges query-results))))
 
 (defn search [q & {:keys [method facet-fields facet-date-ranges facet-numeric-ranges

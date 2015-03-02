@@ -70,7 +70,9 @@
                     :count            2}],
            :start 9,
            :end   12,
-           :gap   1}
+           :gap   1
+           :before 0
+           :after  0}
           {:name   "updated"
            :values [{:max-noninclusive "2015-02-28T00:00:00.000Z"
                      :min-inclusive "2015-02-27T00:00:00Z"
@@ -79,7 +81,9 @@
                      :count 3}]
            :start  (tcoerce/to-date (t/date-time 2015 02 26))
            :end    (tcoerce/to-date (t/date-time 2015 02 28))
-           :gap    "+1DAY"}]
+           :gap    "+1DAY"
+           :before nil
+           :after  nil}]
          (:facet-range-fields
            (meta (search "my"
                          :facet-numeric-ranges [{:field "numeric"
