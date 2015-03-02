@@ -80,9 +80,7 @@
                                                              (if (= i 0)
                                                                "*"
                                                                (:title (nth values (dec i))))
-                                                             (:title val))
-                                                     (str/replace #" " "%20")
-                                                     (str/replace #":" "%3A"))))
+                                                             (:title val)))))
                              (range (count values)) values)]
                     {:name   (.getName r)
                      :values values-facet-queries
