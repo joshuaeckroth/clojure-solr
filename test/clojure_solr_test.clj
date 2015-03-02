@@ -63,7 +63,7 @@
                    [{:count 1,
                      :value "[* TO 9]",
                      :min-inclusive nil,
-                     :max-noninclusive "10"}
+                     :max-noninclusive "9"}
                     {:max-noninclusive "11",
                      :min-inclusive "10",
                      :value "[10 TO 11]",
@@ -76,7 +76,7 @@
                      :count 2}
                     {:count 1,
                      :value "[12 TO *]",
-                     :min-inclusive "11",
+                     :min-inclusive "12",
                      :max-noninclusive nil}],
            :start 9,
            :end 12,

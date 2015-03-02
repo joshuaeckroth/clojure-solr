@@ -105,14 +105,14 @@
                                         (concat [{:count (.getBefore r)
                                                   :value (format "[* TO %s]" (format-range-value (.getStart r)))
                                                   :min-inclusive nil
-                                                  :max-noninclusive (:orig-value (first values))}]
+                                                  :max-noninclusive (format-range-value (.getStart r))}]
                                                 values-facet-queries)
                                         values-facet-queries)
                         values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
                                               (concat values-before
                                                       [{:count (.getAfter r)
                                                         :value (format "[%s TO *]" (format-range-value (.getEnd r)))
-                                                        :min-inclusive (:orig-value (last values))
+                                                        :min-inclusive (format-range-value (.getEnd r))
                                                         :max-noninclusive nil}])
                                               values-before)]
                     {:name   (.getName r)
