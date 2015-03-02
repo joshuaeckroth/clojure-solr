@@ -61,7 +61,7 @@
   (is (= [{:name "numeric",
            :values
                    [{:count 1,
-                     :value "[* TO 10]",
+                     :value "[* TO 9]",
                      :min-inclusive nil,
                      :max-noninclusive "10"}
                     {:max-noninclusive "11",
@@ -75,7 +75,7 @@
                      :orig-value "11",
                      :count 2}
                     {:count 1,
-                     :value "[11 TO *]",
+                     :value "[12 TO *]",
                      :min-inclusive "11",
                      :max-noninclusive nil}],
            :start 9,

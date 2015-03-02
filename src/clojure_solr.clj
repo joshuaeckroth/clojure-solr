@@ -101,17 +101,17 @@
                                                      (format-range-value (.getEnd r))
                                                      (:orig-value (nth values (inc i))))))
                              (range (count values)) values)
-                        values-before (if (and (not-empty values) (.getBefore r) (> (.getBefore r) 0))
+                        values-before (if (and (.getBefore r) (> (.getBefore r) 0))
                                         (concat [{:count (.getBefore r)
-                                                  :value (format "[* TO %s]" (:orig-value (first values)))
+                                                  :value (format "[* TO %s]" (format-range-value (.getStart r)))
                                                   :min-inclusive nil
                                                   :max-noninclusive (:orig-value (first values))}]
                                                 values-facet-queries)
                                         values-facet-queries)
-                        values-before-after (if (and (not-empty values) (.getAfter r) (> (.getAfter r) 0))
+                        values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
                                               (concat values-before
                                                       [{:count (.getAfter r)
-                                                        :value (format "[%s TO *]" (:orig-value (last values)))
+                                                        :value (format "[%s TO *]" (format-range-value (.getEnd r)))
                                                         :min-inclusive (:orig-value (last values))
                                                         :max-noninclusive nil}])
                                               values-before)]
