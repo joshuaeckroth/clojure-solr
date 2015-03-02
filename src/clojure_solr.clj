@@ -76,16 +76,13 @@
                   (let [values (vec (sort-by :value (map (fn [v] {:title (.getValue v) :count (.getCount v)}) (.getCounts r))))
                         values-facet-queries
                         (map (fn [i val]
-                               (assoc val :value (-> (java.net.URLEncoder/encode
-                                                       (format "[%s TO %s]"
-                                                               (if (= i 0)
-                                                                 "*"
-                                                                 (:title (nth values (dec i))))
-                                                               (:title val))
-                                                       "UTF-8")
-                                                     (str/replace #"\+" "%20")
-                                                     (str/replace #"%5B" "[")
-                                                     (str/replace #"%5D" "]"))))
+                               (assoc val :value (-> (format "[%s TO %s]"
+                                                             (if (= i 0)
+                                                               "*"
+                                                               (:title (nth values (dec i))))
+                                                             (:title val))
+                                                     (str/replace #" " "%20")
+                                                     (str/replace #":" "%3A"))))
                              (range (count values)) values)]
                     {:name   (.getName r)
                      :values values-facet-queries
