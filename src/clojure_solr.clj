@@ -70,12 +70,17 @@
        (.getLimitingFacets query-results)
        (.getFacetFields query-results))))
 
-(defn search [q & {:keys [method facet-fields facet-hier-sep facet-filters] :as flags}]
+(defn search [q & {:keys [method facet-fields facet-date-ranges facet-numeric-ranges
+                          facet-hier-sep facet-filters] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)]
-    (doseq [[key value] (dissoc flags :method :facet-fields :facet-filters)]
+    (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (.addFacetField query (into-array String (map name facet-fields)))
+    (doseq [{:keys [field start end gap]} facet-date-ranges]
+      (.addDateRangeFacet query field start end gap))
+    (doseq [{:keys [field start end gap]} facet-numeric-ranges]
+      (.addNumericRangeFacet query field start end gap))
     (.addFilterQuery query (into-array String (map (fn [{:keys [name value]}]
                                                    (format "{!raw f=%s}%s" name value))
                                                  facet-filters)))
