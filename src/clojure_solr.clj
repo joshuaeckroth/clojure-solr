@@ -92,15 +92,11 @@
                         (map (fn [i val]
                                (assoc val
                                  :value (format "[%s TO %s]"
-                                                (if (= i 0)
-                                                  (format-range-value (.getStart r))
-                                                  (:orig-value val))
+                                                (:orig-value val)
                                                 (if (= i (dec (count values)))
                                                   (format-range-value (.getEnd r))
                                                   (:orig-value (nth values (inc i)))))
-                                 :min-inclusive (if (= i 0)
-                                                  (format-range-value (.getStart r))
-                                                  (:orig-value val))
+                                 :min-inclusive (:orig-value val)
                                  :max-noninclusive (if (= i (dec (count values)))
                                                      (format-range-value (.getEnd r))
                                                      (:orig-value (nth values (inc i))))))

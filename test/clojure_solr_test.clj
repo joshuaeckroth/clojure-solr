@@ -59,8 +59,8 @@
   (is (= [{:name "numeric",
            :values
                   [{:max-noninclusive "11",
-                    :min-inclusive    "9",
-                    :value            "[9 TO 11]",
+                    :min-inclusive    "10",
+                    :value            "[10 TO 11]",
                     :orig-value       "10",
                     :count            1}
                    {:max-noninclusive "12"
@@ -73,8 +73,8 @@
            :gap   1}
           {:name   "updated"
            :values [{:max-noninclusive "2015-02-28T00:00:00.000Z"
-                     :min-inclusive "2015-02-26T00:00:00.000Z"
-                     :value "[2015-02-26T00:00:00.000Z TO 2015-02-28T00:00:00.000Z]",
+                     :min-inclusive "2015-02-27T00:00:00Z"
+                     :value "[2015-02-27T00:00:00Z TO 2015-02-28T00:00:00.000Z]",
                      :orig-value "2015-02-27T00:00:00Z",
                      :count 3}]
            :start  (tcoerce/to-date (t/date-time 2015 02 26))
