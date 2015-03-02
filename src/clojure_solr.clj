@@ -78,7 +78,7 @@
                         values-facet-queries
                         (map (fn [i val]
                                (assoc val :value
-                                          (format "[%s+TO+%s]"
+                                          (format "[%s TO %s]"
                                                   (if (= i 0)
                                                     "*"
                                                     (:title (nth values (dec i))))
