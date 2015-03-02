@@ -41,12 +41,12 @@
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/")))))
   (is (= [{:name   "numeric"
-           :values [{:value "[* TO 10]" :title "10" :count 1}]
+           :values [{:value "%5B*%20TO%2010%5D" :title "10" :count 1}]
            :start  10
            :end    12
            :gap    1}
           {:name   "updated"
-           :values [{:value "[* TO 2015-02-27T00:00:00Z]" :title "2015-02-27T00:00:00Z" :count 1}]
+           :values [{:value "%5B*%20TO%202015-02-27T00%3A00%3A00Z%5D" :title "2015-02-27T00:00:00Z" :count 1}]
            :start  (tcoerce/to-date (t/date-time 2015 02 26))
            :end    (tcoerce/to-date (t/date-time 2015 02 28))
            :gap    "+1DAY"}]
