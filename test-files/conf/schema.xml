@@ -270,6 +270,7 @@
    <field name="fulltext" type="text" indexed="true" stored="true" />
    <field name="created" type="date" indexed="true" stored="true" omitNorms="true" />
    <field name="updated" type="date" indexed="true" stored="true" omitNorms="true" />
+   <field name="numeric" type="sint" indexed="true" stored="true" omitNorms="true" />
    <field name="source" type="text" indexed="true" stored="true" />
    <field name="provenance" type="string" indexed="true" stored="true" omitNorms="true" />
    <field name="type" type="string" indexed="true" stored="true" required="true" multiValued="false" omitNorms="true" />

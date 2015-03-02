@@ -60,15 +60,36 @@
              :values (sort-by :path
                               (map (fn [v]
                                    (let [split-path (str/split (.getName v) facet-hier-sep)]
-                                     {:path (.getName v)
+                                     {:value (.getName v)
                                       :split-path split-path
-                                      :name (last split-path)
+                                      :title (last split-path)
                                       :depth (count split-path)
                                       :count (.getCount v)}))
                                  (.getValues f)))})
      (if limiting?
        (.getLimitingFacets query-results)
        (.getFacetFields query-results))))
+
+(defn extract-facet-ranges
+  [query-results]
+  (sort-by :name
+           (map (fn [r]
+                  (let [values (vec (sort-by :value (map (fn [v] {:title (.getValue v) :count (.getCount v)}) (.getCounts r))))
+                        values-facet-queries
+                        (map (fn [i val]
+                               (assoc val :value
+                                          (format "[%s+TO+%s]"
+                                                  (if (= i 0)
+                                                    "*"
+                                                    (:title (nth values (dec i))))
+                                                  (:title val))))
+                             (range (count values)) values)]
+                    {:name   (.getName r)
+                     :values values-facet-queries
+                     :start  (.getStart r)
+                     :end    (.getEnd r)
+                     :gap    (.getGap r)}))
+                (.getFacetRanges query-results))))
 
 (defn search [q & {:keys [method facet-fields facet-date-ranges facet-numeric-ranges
                           facet-hier-sep facet-filters] :as flags}]
@@ -80,9 +101,14 @@
     (doseq [{:keys [field start end gap]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap))
     (doseq [{:keys [field start end gap]} facet-numeric-ranges]
+      (assert (instance? Number start))
+      (assert (instance? Number end))
+      (assert (instance? Number gap))
       (.addNumericRangeFacet query field start end gap))
     (.addFilterQuery query (into-array String (map (fn [{:keys [name value]}]
-                                                   (format "{!raw f=%s}%s" name value))
+                                                     (if (re-find #"\[" value) ;; range filter
+                                                       (format "%s:%s" name value)
+                                                       (format "{!raw f=%s}%s" name value)))
                                                  facet-filters)))
     (.setFacetMinCount query 1)
     (let [query-results (.query *connection* query method)
@@ -93,6 +119,7 @@
          :rows-total (.getNumFound results)
          :highlighting (.getHighlighting query-results)
          :facet-fields (extract-facets query-results facet-hier-sep false)
+         :facet-range-fields (extract-facet-ranges query-results)
          :limiting-facet-fields (extract-facets query-results facet-hier-sep true)
          :results-obj results
          :query-results-obj query-results}))))
