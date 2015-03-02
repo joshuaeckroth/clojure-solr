@@ -131,8 +131,9 @@
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (.addFacetField query (into-array String (map name facet-fields)))
-    (doseq [{:keys [field start end gap]} facet-date-ranges]
-      (.addDateRangeFacet query field start end gap))
+    (doseq [{:keys [field start end gap others]} facet-date-ranges]
+      (.addDateRangeFacet query field start end gap)
+      (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others))))
     (doseq [{:keys [field start end gap others]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
