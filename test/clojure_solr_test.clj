@@ -70,7 +70,7 @@
                      :count 1}
                     {:max-noninclusive "12",
                      :min-inclusive "11",
-                     :value "[11 TO 12]",
+                     :value "[11 TO ?]",
                      :count 2}
                     {:count 1,
                      :value "[12 TO *]",
@@ -82,9 +82,9 @@
            :before 1,
            :after 1}
           {:name   "updated"
-           :values [{:max-noninclusive "2015-02-27T23:59:59-06:00",
-                     :min-inclusive    "2015-02-26T00:00:00-06:00",
-                     :value            "[2015-02-26T06:00:00Z TO 2015-02-28T05:59:59Z]",
+           :values [{:min-inclusive    "2015-02-26T00:00:00-06:00",
+                     :max-noninclusive "2015-02-27T23:59:59-06:00",
+                     :value            "[2015-02-26T06:00:00Z TO ?]",
                      :count            5}]
            :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
                                                       (t/time-zone-for-id "America/Chicago")))
