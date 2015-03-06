@@ -5,3 +5,7 @@ lib/
 pom.xml
 test-files/data
 test-files/dist
+.idea/
+.lein*
+target/
+*.iml
