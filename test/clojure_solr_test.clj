@@ -82,9 +82,9 @@
            :before 1,
            :after 1}
           {:name   "updated"
-           :values [{:max-noninclusive "2015-02-28T00:00:00-06:00",
+           :values [{:max-noninclusive "2015-02-27T23:59:59-06:00",
                      :min-inclusive    "2015-02-26T00:00:00-06:00",
-                     :value            "[2015-02-26T06:00:00Z TO 2015-02-28T06:00:00Z]",
+                     :value            "[2015-02-26T06:00:00Z TO 2015-02-28T05:59:59Z]",
                      :count            5}]
            :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
                                                       (t/time-zone-for-id "America/Chicago")))
@@ -96,11 +96,13 @@
          (:facet-range-fields
            (meta (search "my"
                          :facet-numeric-ranges
-                         [{:field  "numeric"
-                           :start  (Integer. 9)
-                           :end    (Integer. 12)
-                           :gap    (Integer. 1)
-                           :others ["before" "after"]}]
+                         [{:field   "numeric"
+                           :start   (Integer. 9)
+                           :end     (Integer. 12)
+                           :gap     (Integer. 1)
+                           :others  ["before" "after"]
+                           :include "lower"
+                           :hardend true}]
                          :facet-date-ranges
                          [{:field    "updated"
                            :start    (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
