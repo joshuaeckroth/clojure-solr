@@ -108,8 +108,10 @@
                                                   (format-range-value (:orig-value (nth values (inc i))) nil true)))
                                  :min-inclusive (format-range-value (:orig-value val) timezone false)
                                  :max-noninclusive (if (= i (dec (count values)))
-                                                     (format-range-value (.getEnd r) timezone true)
-                                                     (format-range-value (:orig-value (nth values (inc i))) timezone true))))
+                                                     (if (and (= 1 (count values)) (= 0 (.getAfter r)))
+                                                       nil
+                                                       (format-range-value (.getEnd r) nil true))
+                                                     (format-range-value (:orig-value (nth values (inc i))) nil true))))
                              (range (count values)) values)
                         values-before (if (and (.getBefore r) (> (.getBefore r) 0))
                                         (concat [{:count (.getBefore r)

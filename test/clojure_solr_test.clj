@@ -79,7 +79,7 @@
            :after 1}
           {:name   "updated"
            :values [{:min-inclusive    "2015-02-26T00:00:00-06:00",
-                     :max-noninclusive "2015-02-27T23:59:59-06:00",
+                     :max-noninclusive nil
                      :value            "[2015-02-26T06:00:00Z TO ?]",
                      :count            5}]
            :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
