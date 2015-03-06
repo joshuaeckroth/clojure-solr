@@ -64,21 +64,17 @@
                      :value "[* TO 9]",
                      :min-inclusive nil,
                      :max-noninclusive "9"}
-                    {:max-noninclusive "11",
-                     :min-inclusive "10",
-                     :value "[10 TO 11]",
-                     :count 1}
                     {:max-noninclusive "12",
-                     :min-inclusive "11",
-                     :value "[11 TO ?]",
-                     :count 2}
+                     :min-inclusive "9",
+                     :value "[9 TO 12]",
+                     :count 3}
                     {:count 1,
                      :value "[12 TO *]",
                      :min-inclusive "12",
                      :max-noninclusive nil}],
            :start 9,
            :end 12,
-           :gap 1,
+           :gap 3,
            :before 1,
            :after 1}
           {:name   "updated"
@@ -99,10 +95,10 @@
                          [{:field   "numeric"
                            :start   (Integer. 9)
                            :end     (Integer. 12)
-                           :gap     (Integer. 1)
+                           :gap     (Integer. 3)
                            :others  ["before" "after"]
                            :include "lower"
-                           :hardend true}]
+                           :hardend false}]
                          :facet-date-ranges
                          [{:field    "updated"
                            :start    (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)

@@ -102,7 +102,9 @@
                                  :value (format "[%s TO %s]"
                                                 (format-range-value (:orig-value val) nil false)
                                                 (if (= i (dec (count values)))
-                                                  "?"
+                                                  (if (and (= 1 (count values)) (= 0 (.getAfter r)))
+                                                    "?"
+                                                    (format-range-value (.getEnd r) nil true))
                                                   (format-range-value (:orig-value (nth values (inc i))) nil true)))
                                  :min-inclusive (format-range-value (:orig-value val) timezone false)
                                  :max-noninclusive (if (= i (dec (count values)))
