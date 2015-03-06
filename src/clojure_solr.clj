@@ -6,7 +6,8 @@
   (:import (org.apache.solr.client.solrj.impl HttpSolrServer)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
-           (org.apache.solr.common.params ModifiableSolrParams)))
+           (org.apache.solr.common.params ModifiableSolrParams)
+           (org.apache.solr.util DateMathParser)))
 
 (declare ^:dynamic *connection*)
 
@@ -91,7 +92,9 @@
   [query-results facet-date-ranges]
   (sort-by :name
            (map (fn [r]
-                  (let [timezone (:timezone (first (filter (fn [{:keys [field]}] (= field (.getName r)))
+                  (let [date-range? (some (fn [{:keys [field]}] (= field (.getName r)))
+                                            facet-date-ranges)
+                        timezone (:timezone (first (filter (fn [{:keys [field]}] (= field (.getName r)))
                                                            facet-date-ranges)))
                         values (sort-by :value (map (fn [v] {:orig-value (.getValue v)
                                                              :count      (.getCount v)})
@@ -103,14 +106,21 @@
                                                 (format-range-value (:orig-value val) nil false)
                                                 (if (= i (dec (count values)))
                                                   (if (and (= 1 (count values)) (= 0 (.getAfter r)))
-                                                    "?"
+                                                    (format-range-value
+                                                      (if date-range?
+                                                        (.parseMath (doto (DateMathParser.)
+                                                                      (.setNow
+                                                                        (tcoerce/to-date
+                                                                          (tformat/parse date-time-formatter
+                                                                                         (:orig-value val)))))
+                                                                    (.getGap r))
+                                                        (+ (:orig-value val) (.getGap r)))
+                                                      nil true)
                                                     (format-range-value (.getEnd r) nil true))
                                                   (format-range-value (:orig-value (nth values (inc i))) nil true)))
                                  :min-inclusive (format-range-value (:orig-value val) timezone false)
                                  :max-noninclusive (if (= i (dec (count values)))
-                                                     (if (and (= 1 (count values)) (= 0 (.getAfter r)))
-                                                       nil
-                                                       (format-range-value (.getEnd r) nil true))
+                                                     (format-range-value (.getEnd r) nil true)
                                                      (format-range-value (:orig-value (nth values (inc i))) nil true))))
                              (range (count values)) values)
                         values-before (if (and (.getBefore r) (> (.getBefore r) 0))
