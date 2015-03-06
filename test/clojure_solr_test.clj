@@ -84,26 +84,34 @@
            :before 1,
            :after 1}
           {:name   "updated"
-           :values [{:max-noninclusive "2015-02-28T00:00:00.000Z"
-                     :min-inclusive "2015-02-27T00:00:00Z"
-                     :value "[2015-02-27T00:00:00Z TO 2015-02-28T00:00:00.000Z]",
-                     :orig-value "2015-02-27T00:00:00Z",
-                     :count 5}]
-           :start  (tcoerce/to-date (t/date-time 2015 02 26))
-           :end    (tcoerce/to-date (t/date-time 2015 02 28))
+           :values [{:max-noninclusive "2015-02-28T00:00:00-06:00",
+                     :min-inclusive    "2015-02-26T00:00:00-06:00",
+                     :value            "[2015-02-26T00:00:00-06:00 TO 2015-02-28T00:00:00-06:00]",
+                     :orig-value       "2015-02-26T00:00:00-06:00"
+                     :count            5}]
+           :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
+                                                      (t/time-zone-for-id "America/Chicago")))
+           :end    (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 28)
+                                                      (t/time-zone-for-id "America/Chicago")))
            :gap    "+1DAY"
-           :before nil
-           :after  nil}]
+           :before 0
+           :after  0}]
          (:facet-range-fields
            (meta (search "my"
-                         :facet-numeric-ranges [{:field "numeric"
-                                                 :start (Integer. 9)
-                                                 :end (Integer. 12)
-                                                 :gap (Integer. 1)
-                                                 :others ["before" "after"]}]
-                         :facet-date-ranges [{:field "updated"
-                                              :start (tcoerce/to-date (t/date-time 2015 02 26))
-                                              :end   (tcoerce/to-date (t/date-time 2015 02 28))
-                                              :gap   "+1DAY"}]))))))
+                         :facet-numeric-ranges
+                         [{:field  "numeric"
+                           :start  (Integer. 9)
+                           :end    (Integer. 12)
+                           :gap    (Integer. 1)
+                           :others ["before" "after"]}]
+                         :facet-date-ranges
+                         [{:field    "updated"
+                           :start    (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
+                                                                        (t/time-zone-for-id "America/Chicago")))
+                           :end      (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 28)
+                                                                        (t/time-zone-for-id "America/Chicago")))
+                           :gap      "+1DAY"
+                           :timezone (t/time-zone-for-id "America/Chicago")
+                           :others   ["before" "after"]}]))))))
 
 

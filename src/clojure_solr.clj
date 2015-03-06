@@ -73,20 +73,27 @@
        (.getFacetFields query-results))))
 
 (def date-time-formatter
-  (tformat/formatters :date-time))
+  (tformat/formatters :date-time-no-ms))
 
 (defn format-range-value
-  [val]
-  (cond (instance? java.util.Date val)
-        (tformat/unparse date-time-formatter (tcoerce/from-date val))
-        :else (str val)))
+  "Timezone is only used if it's a date facet (and timezone is not null)."
+  [val timezone]
+  (let [d (try (tformat/parse date-time-formatter val)
+               (catch Exception _))]
+    (cond (or d (instance? java.util.Date val))
+          (let [d (or d (tcoerce/from-date val))]
+            (tformat/unparse (if timezone (tformat/with-zone date-time-formatter timezone) date-time-formatter) d))
+          :else (str val))))
 
 (defn extract-facet-ranges
-  [query-results]
+  "Explicitly pass facet-date-ranges in case one or more ranges are date ranges, and we need to grab a timezone."
+  [query-results facet-date-ranges]
   (sort-by :name
            (map (fn [r]
-                  (let [values (sort-by :value (map (fn [v] {:orig-value (.getValue v)
-                                                             :count (.getCount v)})
+                  (let [timezone (:timezone (first (filter (fn [{:keys [field]}] (= field (.getName r)))
+                                                           facet-date-ranges)))
+                        values (sort-by :value (map (fn [v] {:orig-value (format-range-value (.getValue v) timezone)
+                                                             :count      (.getCount v)})
                                                     (.getCounts r)))
                         values-facet-queries
                         (map (fn [i val]
@@ -94,25 +101,25 @@
                                  :value (format "[%s TO %s]"
                                                 (:orig-value val)
                                                 (if (= i (dec (count values)))
-                                                  (format-range-value (.getEnd r))
+                                                  (format-range-value (.getEnd r) timezone)
                                                   (:orig-value (nth values (inc i)))))
                                  :min-inclusive (:orig-value val)
                                  :max-noninclusive (if (= i (dec (count values)))
-                                                     (format-range-value (.getEnd r))
+                                                     (format-range-value (.getEnd r) timezone)
                                                      (:orig-value (nth values (inc i))))))
                              (range (count values)) values)
                         values-before (if (and (.getBefore r) (> (.getBefore r) 0))
                                         (concat [{:count (.getBefore r)
-                                                  :value (format "[* TO %s]" (format-range-value (.getStart r)))
+                                                  :value (format "[* TO %s]" (format-range-value (.getStart r) timezone))
                                                   :min-inclusive nil
-                                                  :max-noninclusive (format-range-value (.getStart r))}]
+                                                  :max-noninclusive (format-range-value (.getStart r) timezone)}]
                                                 values-facet-queries)
                                         values-facet-queries)
                         values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
                                               (concat values-before
                                                       [{:count (.getAfter r)
-                                                        :value (format "[%s TO *]" (format-range-value (.getEnd r)))
-                                                        :min-inclusive (format-range-value (.getEnd r))
+                                                        :value (format "[%s TO *]" (format-range-value (.getEnd r) timezone))
+                                                        :min-inclusive (format-range-value (.getEnd r) timezone)
                                                         :max-noninclusive nil}])
                                               values-before)]
                     {:name   (.getName r)
@@ -154,7 +161,7 @@
          :rows-total (.getNumFound results)
          :highlighting (.getHighlighting query-results)
          :facet-fields (extract-facets query-results facet-hier-sep false)
-         :facet-range-fields (extract-facet-ranges query-results)
+         :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
          :limiting-facet-fields (extract-facets query-results facet-hier-sep true)
          :results-obj results
          :query-results-obj query-results}))))
