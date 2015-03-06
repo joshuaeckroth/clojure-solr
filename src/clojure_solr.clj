@@ -93,43 +93,36 @@
   (sort-by :name
            (map (fn [r]
                   (let [date-range? (some (fn [{:keys [field]}] (= field (.getName r)))
-                                            facet-date-ranges)
+                                          facet-date-ranges)
                         timezone (:timezone (first (filter (fn [{:keys [field]}] (= field (.getName r)))
                                                            facet-date-ranges)))
-                        values (sort-by :value (map (fn [v] {:orig-value (.getValue v)
-                                                             :count      (.getCount v)})
-                                                    (.getCounts r)))
-                        values-facet-queries
-                        (map (fn [i val]
-                               (assoc val
-                                 :value (format "[%s TO %s]"
-                                                (format-range-value (:orig-value val) nil false)
-                                                (if (= i (dec (count values)))
-                                                  (if (and (= 1 (count values)) (= 0 (.getAfter r)))
-                                                    (format-range-value
-                                                      (if date-range?
-                                                        (.parseMath (doto (DateMathParser.)
-                                                                      (.setNow
-                                                                        (tcoerce/to-date
-                                                                          (tformat/parse date-time-formatter
-                                                                                         (:orig-value val)))))
-                                                                    (.getGap r))
-                                                        (+ (:orig-value val) (.getGap r)))
-                                                      nil true)
-                                                    (format-range-value (.getEnd r) nil true))
-                                                  (format-range-value (:orig-value (nth values (inc i))) nil true)))
-                                 :min-inclusive (format-range-value (:orig-value val) timezone false)
-                                 :max-noninclusive (if (= i (dec (count values)))
-                                                     (format-range-value (.getEnd r) nil true)
-                                                     (format-range-value (:orig-value (nth values (inc i))) nil true))))
-                             (range (count values)) values)
+                        gap (.getGap r)
+                        values
+                        (map (fn [val]
+                               (let [start-val (.getValue val)
+                                     start-str (format-range-value start-val nil false)
+                                     end-val (cond date-range?
+                                                   (.parseMath (doto (DateMathParser.)
+                                                                 (.setNow
+                                                                   (tcoerce/to-date
+                                                                     (tformat/parse date-time-formatter start-val))))
+                                                               gap)
+                                                   (re-matches #"\d+" start-val)
+                                                   (+ (Integer/parseInt start-val) gap)
+                                                   :else (+ (Double/parseDouble start-val) gap))
+                                     end-str (format-range-value end-val nil true)]
+                                 {:count (.getCount val)
+                                  :value (format "[%s TO %s]" start-str end-str)
+                                  :min-inclusive start-str
+                                  :max-noninclusive end-str}))
+                             (.getCounts r))
                         values-before (if (and (.getBefore r) (> (.getBefore r) 0))
                                         (concat [{:count (.getBefore r)
                                                   :value (format "[* TO %s]" (format-range-value (.getStart r) nil true))
                                                   :min-inclusive nil
                                                   :max-noninclusive (format-range-value (.getStart r) timezone true)}]
-                                                values-facet-queries)
-                                        values-facet-queries)
+                                                values)
+                                        values)
                         values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
                                               (concat values-before
                                                       [{:count (.getAfter r)
