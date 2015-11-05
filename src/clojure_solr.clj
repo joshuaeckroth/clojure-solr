@@ -140,7 +140,7 @@
                 (.getFacetRanges query-results))))
 
 (defn search [q & {:keys [method facet-fields facet-date-ranges facet-numeric-ranges
-                          facet-hier-sep facet-filters] :as flags}]
+                          facet-mincount facet-hier-sep facet-filters] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)]
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
@@ -164,7 +164,7 @@
                                                        (format "%s:%s" name value)
                                                        (format "{!raw f=%s}%s" name value)))
                                                  facet-filters)))
-    (.setFacetMinCount query 1)
+    (.setFacetMinCount query (or facet-mincount 1))
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
       (with-meta (map doc-to-hash results)
