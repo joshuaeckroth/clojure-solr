@@ -87,6 +87,14 @@
                              (if end? (t/minus d (t/seconds 1)) d)))
           :else (str val))))
 
+(defn format-standard-filter-query
+  [name value]
+  (format "%s:%s" name value))
+
+(defn format-raw-query
+  [name value]
+  (format "{!raw f=%s}%s" name value))
+
 (defn extract-facet-ranges
   "Explicitly pass facet-date-ranges in case one or more ranges are date ranges, and we need to grab a timezone."
   [query-results facet-date-ranges]
@@ -139,12 +147,14 @@
                      :after  (.getAfter r)}))
                 (.getFacetRanges query-results))))
 
-(defn search [q & {:keys [method facet-fields facet-date-ranges facet-numeric-ranges
+(defn search [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges
                           facet-mincount facet-hier-sep facet-filters] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)]
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
+    (when (not (empty? fields))
+      (.setFields query (into-array fields)))
     (.addFacetField query (into-array String (map name facet-fields)))
     (doseq [{:keys [field start end gap others include hardend]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
@@ -159,10 +169,11 @@
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (.addFilterQuery query (into-array String (map (fn [{:keys [name value]}]
+    (.addFilterQuery query (into-array String (map (fn [{:keys [name value formatter]
+                                                         :or {formatter format-raw-query}}]
                                                      (if (re-find #"\[" value) ;; range filter
                                                        (format "%s:%s" name value)
-                                                       (format "{!raw f=%s}%s" name value)))
+                                                       (formatter name value)))
                                                  facet-filters)))
     (.setFacetMinCount query (or facet-mincount 1))
     (let [query-results (.query *connection* query method)
