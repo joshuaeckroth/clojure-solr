@@ -154,7 +154,7 @@
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (when (not (empty? fields))
-      (.setFields query (into-array fields)))
+      (.setFields query (into-array (map name fields))))
     (.addFacetField query (into-array String (map name facet-fields)))
     (doseq [{:keys [field start end gap others include hardend]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
