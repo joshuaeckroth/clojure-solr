@@ -3,7 +3,7 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
-  (:import (org.apache.solr.client.solrj.impl HttpSolrServer)
+  (:import (org.apache.solr.client.solrj.impl HttpSolrClient)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.common.params ModifiableSolrParams)
@@ -12,7 +12,7 @@
 (declare ^:dynamic *connection*)
 
 (defn connect [url]
-  (HttpSolrServer. url))
+  (HttpSolrClient. url))
 
 (defn- make-document [boost-map doc]
   (let [sdoc (SolrInputDocument.)]
@@ -154,7 +154,7 @@
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (when (not (empty? fields))
-      (.setFields query (into-array fields)))
+      (.setFields query (into-array (map name fields))))
     (.addFacetField query (into-array String (map name facet-fields)))
     (doseq [{:keys [field start end gap others include hardend]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
