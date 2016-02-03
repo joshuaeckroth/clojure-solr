@@ -169,11 +169,12 @@
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (.addFilterQuery query (into-array String (map (fn [{:keys [name value formatter]
-                                                         :or {formatter format-raw-query}}]
+    (.addFilterQuery query (into-array String (map (fn [{:keys [name value formatter]}]
                                                      (if (re-find #"\[" value) ;; range filter
                                                        (format "%s:%s" name value)
-                                                       (formatter name value)))
+                                                       (if formatter
+                                                         (formatter name value)
+                                                         (format-raw-query name value))))
                                                  facet-filters)))
     (.setFacetMinCount query (or facet-mincount 1))
     (let [query-results (.query *connection* query method)
