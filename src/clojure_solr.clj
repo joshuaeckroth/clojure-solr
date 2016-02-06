@@ -77,7 +77,7 @@
   (tformat/formatters :date-time-no-ms))
 
 (def query-result-date-time-parser
-  (tformat/formatter t/utc "YYYY-MM-DD'T'HH:mm:ss.S'Z'" "YYYY-MM-DD'T'HH:mm:ss'Z'"))
+  (tformat/formatter t/utc "YYYY-MM-DD'T'HH:mm:ss.SSS'Z'" "YYYY-MM-DD'T'HH:mm:ss'Z'"))
 
 (defn format-range-value
   "Timezone is only used if it's a date facet (and timezone is not null)."
@@ -159,16 +159,18 @@
     (when (not (empty? fields))
       (.setFields query (into-array (map name fields))))
     (.addFacetField query (into-array String (map name facet-fields)))
-    (doseq [{:keys [field start end gap others include hardend]} facet-date-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
+      (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (doseq [{:keys [field start end gap others include hardend]} facet-numeric-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
       (assert (instance? Number gap))
       (.addNumericRangeFacet query field start end gap)
+      (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
