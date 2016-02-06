@@ -18,6 +18,7 @@
 
 <config>
   
+  <dataDir>../data</dataDir>
   <!--
     Controls what version of Lucene various components of Solr adhere to. Generally, you want
     to use the latest version to get all bug fixes and improvements. It is highly recommended 
