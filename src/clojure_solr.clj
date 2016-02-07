@@ -159,13 +159,13 @@
     (when (not (empty? fields))
       (.setFields query (into-array (map name fields))))
     (.addFacetField query (into-array String (map name facet-fields)))
-    (doseq [{:keys [field start end gap others include hardend missing]} facet-date-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
       (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (doseq [{:keys [field start end gap others include hardend missing]} facet-numeric-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
       (assert (instance? Number gap))
