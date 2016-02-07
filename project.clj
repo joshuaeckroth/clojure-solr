@@ -7,5 +7,5 @@
                  [clj-time "0.11.0" :exclusions [org.clojure/clojure]]]
   :profiles {:dev {:dependencies [[javax.servlet/servlet-api "2.5"]]}}
   ;;:repositories [["restlet" {:url "http://maven.restlet.org"}]]
-  :repositories [["restlet" {:url "http://repository.sonatype.org/content/groups/forge"}]]
+  :repositories [["restlet" {:url "http://repo.spring.io/libs-release-remote"}]]
   )
