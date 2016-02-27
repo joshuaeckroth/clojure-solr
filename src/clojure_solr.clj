@@ -77,7 +77,7 @@
   (tformat/formatters :date-time-no-ms))
 
 (def query-result-date-time-parser
-  (tformat/formatter t/utc "YYYY-MM-DD'T'HH:mm:ss.SSS'Z'" "YYYY-MM-DD'T'HH:mm:ss'Z'"))
+  (tformat/formatter t/utc "YYYY-MM-dd'T'HH:mm:ss.SSS'Z'" "YYYY-MM-dd'T'HH:mm:ss'Z'"))
 
 (defn format-range-value
   "Timezone is only used if it's a date facet (and timezone is not null)."
@@ -115,8 +115,8 @@
                                      end-val (cond date-range?
                                                    (.parseMath (doto (DateMathParser.)
                                                                  (.setNow
-                                                                   (tcoerce/to-date
-                                                                    (tformat/parse query-result-date-time-parser start-val))))
+                                                                  (tcoerce/to-date
+                                                                   (tformat/parse query-result-date-time-parser start-val))))
                                                                gap)
                                                    (re-matches #"\d+" start-val)
                                                    (+ (Integer/parseInt start-val) gap)

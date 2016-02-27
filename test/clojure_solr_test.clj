@@ -97,11 +97,10 @@
             :before 1,
             :after 1}
            (some #(and (= (:name %) "numeric") %) (:facet-range-fields result))))
-    ;; This is wierd.  Solr returns Jan 27 instead of Feb 27 for max-noninclusive, when all sample doc dates are the same. 
     (is (= {:name   "updated"
             :values [{:min-inclusive    "2015-02-26T06:00:00Z"
-                      :max-noninclusive "2015-01-27T05:59:59Z"
-                      :value            "[2015-02-26T06:00:00Z TO 2015-01-27T05:59:59Z]",
+                      :max-noninclusive "2015-02-27T05:59:59Z"
+                      :value            "[2015-02-26T06:00:00Z TO 2015-02-27T05:59:59Z]",
                       :count            5}]
             :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
                                                        (t/time-zone-for-id "America/Chicago")))
@@ -110,6 +109,6 @@
             :gap    "+1DAY"
             :before 0
             :after  0}
-           (some #(and (= (:name %) "updated") %) (:facet-range-fields result))))))
+           (first (filter #(= (:name %) "updated") (:facet-range-fields result)))))))
 
 
