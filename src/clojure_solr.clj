@@ -76,6 +76,9 @@
 (def date-time-formatter
   (tformat/formatters :date-time-no-ms))
 
+(def query-result-date-time-parser
+  (tformat/formatter t/utc "YYYY-MM-DD'T'HH:mm:ss.SSS'Z'" "YYYY-MM-DD'T'HH:mm:ss'Z'"))
+
 (defn format-range-value
   "Timezone is only used if it's a date facet (and timezone is not null)."
   [val timezone end?]
@@ -113,7 +116,7 @@
                                                    (.parseMath (doto (DateMathParser.)
                                                                  (.setNow
                                                                    (tcoerce/to-date
-                                                                     (tformat/parse date-time-formatter start-val))))
+                                                                    (tformat/parse query-result-date-time-parser start-val))))
                                                                gap)
                                                    (re-matches #"\d+" start-val)
                                                    (+ (Integer/parseInt start-val) gap)
@@ -156,24 +159,27 @@
     (when (not (empty? fields))
       (.setFields query (into-array (map name fields))))
     (.addFacetField query (into-array String (map name facet-fields)))
-    (doseq [{:keys [field start end gap others include hardend]} facet-date-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
+      (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (doseq [{:keys [field start end gap others include hardend]} facet-numeric-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
       (assert (instance? Number gap))
       (.addNumericRangeFacet query field start end gap)
+      (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (.addFilterQuery query (into-array String (map (fn [{:keys [name value formatter]
-                                                         :or {formatter format-raw-query}}]
+    (.addFilterQuery query (into-array String (map (fn [{:keys [name value formatter]}]
                                                      (if (re-find #"\[" value) ;; range filter
                                                        (format "%s:%s" name value)
-                                                       (formatter name value)))
+                                                       (if formatter
+                                                         (formatter name value)
+                                                         (format-raw-query name value))))
                                                  facet-filters)))
     (.setFacetMinCount query (or facet-mincount 1))
     (let [query-results (.query *connection* query method)
