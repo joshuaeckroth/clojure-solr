@@ -13,7 +13,7 @@
                (when (.isDirectory f)
                  (doseq [f2 (.listFiles f)]
                    (func func f2)))
-               (clojure.java.io/delete-file f))]
+               (try (clojure.java.io/delete-file f) (catch Exception _)))]
     (func func (clojure.java.io/file fname))))
 
 (defn solr-server-fixture
