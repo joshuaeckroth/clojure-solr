@@ -58,17 +58,20 @@
   (get http-methods method SolrRequest$METHOD/GET))
 
 (defn extract-facets
-  [query-results facet-hier-sep limiting?]
+  [query-results facet-hier-sep limiting? formatters]
   (map (fn [f] {:name (.getName f)
-             :values (sort-by :path
-                              (map (fn [v]
-                                   (let [split-path (str/split (.getName v) facet-hier-sep)]
-                                     {:value (.getName v)
-                                      :split-path split-path
-                                      :title (last split-path)
-                                      :depth (count split-path)
-                                      :count (.getCount v)}))
-                                 (.getValues f)))})
+                :values (sort-by :path
+                                 (map (fn [v]
+                                        (let [result
+                                              (merge
+                                               {:value (.getName v)
+                                                :count (.getCount v)}
+                                               (when-let [split-path (and facet-hier-sep (str/split (.getName v) facet-hier-sep))]
+                                                 {:split-path split-path
+                                                  :title (last split-path)
+                                                  :depth (count split-path)}))]
+                                          ((get formatters (.getName f) identity) result)))
+                                      (.getValues f)))})
      (if limiting?
        (.getLimitingFacets query-results)
        (.getFacetFields query-results))))
@@ -153,19 +156,29 @@
 (defn search [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges
                           facet-mincount facet-hier-sep facet-filters] :as flags}]
   (let [query (SolrQuery. q)
-        method (parse-method method)]
+        method (parse-method method)
+        facet-result-formatters (into {} (map #(if (map? %)
+                                                 [(:name %) (:result-formatter % identity)]
+                                                 [% identity])
+                                              facet-fields))]
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (when (not (empty? fields))
       (.setFields query (into-array (map name fields))))
-    (.addFacetField query (into-array String (map name facet-fields)))
+    (.addFacetField query
+                    (into-array String
+                                (map #(if (map? %) (:name %) (name %)) facet-fields)))
+    (doseq [facet-field facet-fields]
+      (when (map? facet-field)
+        (if (:prefix facet-field)
+          (.setParam query (format "f.%s.facet.prefix" (:name facet-field)) (into-array String [(:prefix facet-field)])))))
     (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-date-ranges]
       (.addDateRangeFacet query field start end gap)
       (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-numeric-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing mincount prefix]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
       (assert (instance? Number gap))
@@ -189,9 +202,9 @@
          :rows-set (count results)
          :rows-total (.getNumFound results)
          :highlighting (.getHighlighting query-results)
-         :facet-fields (extract-facets query-results facet-hier-sep false)
+         :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
          :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
-         :limiting-facet-fields (extract-facets query-results facet-hier-sep true)
+         :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
          :results-obj results
          :query-results-obj query-results}))))
 

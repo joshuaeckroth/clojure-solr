@@ -52,6 +52,30 @@
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
 
+(deftest test-facet-prefix
+  (do (add-document! sample-doc)
+      (add-document! (assoc sample-doc :id "2" :numeric 11))
+      (add-document! (assoc sample-doc :id "3" :numeric 11))
+      (add-document! (assoc sample-doc :id "4" :numeric 15))
+      (add-document! (assoc sample-doc :id "5" :numeric 8))
+      (commit!))
+  (let [result (meta (search "my"
+                             :facet-fields [{:name "terms" :prefix "Voc"}]))]
+    (is (not (empty? (:facet-fields result)))))
+  (let [result (meta (search "my"
+                             :facet-fields [{:name "terms" :prefix "Vocabulary 1"}]))]
+    (is (not (empty? (:facet-fields result))))
+    (is (= 3 (count (-> result :facet-fields first :values))))
+    (is (every? #(.startsWith (:value %) "Vocabulary 1")
+                (-> result :facet-fields first :values))))
+  (let [result (meta (search "my"
+                             :facet-fields [{:name "terms" :prefix "Vocabulary 1"
+                                             :result-formatter #(update-in % [:value] clojure.string/lower-case)}]))]
+    (is (not (empty? (:facet-fields result))))
+    (is (= 3 (count (-> result :facet-fields first :values))))
+    (is (every? #(.startsWith (:value %) "vocabulary 1")
+                (-> result :facet-fields first :values)))))
+
 (deftest test-facet-ranges
   (do (add-document! sample-doc)
       (add-document! (assoc sample-doc :id "2" :numeric 11))
