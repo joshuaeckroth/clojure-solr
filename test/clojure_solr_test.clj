@@ -13,7 +13,7 @@
                (when (.isDirectory f)
                  (doseq [f2 (.listFiles f)]
                    (func func f2)))
-               (clojure.java.io/delete-file f))]
+               (try (clojure.java.io/delete-file f) (catch Exception _)))]
     (func func (clojure.java.io/file fname))))
 
 (defn solr-server-fixture
@@ -51,6 +51,30 @@
             {:value "Vocabulary 2/Term X/Term Y" :split-path ["Vocabulary 2" "Term X" "Term Y"] :title "Term Y" :depth 3 :count 1}]}]
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
+
+(deftest test-facet-prefix
+  (do (add-document! sample-doc)
+      (add-document! (assoc sample-doc :id "2" :numeric 11))
+      (add-document! (assoc sample-doc :id "3" :numeric 11))
+      (add-document! (assoc sample-doc :id "4" :numeric 15))
+      (add-document! (assoc sample-doc :id "5" :numeric 8))
+      (commit!))
+  (let [result (meta (search "my"
+                             :facet-fields [{:name "terms" :prefix "Voc"}]))]
+    (is (not (empty? (:facet-fields result)))))
+  (let [result (meta (search "my"
+                             :facet-fields [{:name "terms" :prefix "Vocabulary 1"}]))]
+    (is (not (empty? (:facet-fields result))))
+    (is (= 3 (count (-> result :facet-fields first :values))))
+    (is (every? #(.startsWith (:value %) "Vocabulary 1")
+                (-> result :facet-fields first :values))))
+  (let [result (meta (search "my"
+                             :facet-fields [{:name "terms" :prefix "Vocabulary 1"
+                                             :result-formatter #(update-in % [:value] clojure.string/lower-case)}]))]
+    (is (not (empty? (:facet-fields result))))
+    (is (= 3 (count (-> result :facet-fields first :values))))
+    (is (every? #(.startsWith (:value %) "vocabulary 1")
+                (-> result :facet-fields first :values)))))
 
 (deftest test-facet-ranges
   (do (add-document! sample-doc)
@@ -97,11 +121,10 @@
             :before 1,
             :after 1}
            (some #(and (= (:name %) "numeric") %) (:facet-range-fields result))))
-    ;; This is wierd.  Solr returns Jan 27 instead of Feb 27 for max-noninclusive, when all sample doc dates are the same. 
     (is (= {:name   "updated"
             :values [{:min-inclusive    "2015-02-26T06:00:00Z"
-                      :max-noninclusive "2015-01-27T05:59:59Z"
-                      :value            "[2015-02-26T06:00:00Z TO 2015-01-27T05:59:59Z]",
+                      :max-noninclusive "2015-02-27T05:59:59Z"
+                      :value            "[2015-02-26T06:00:00Z TO 2015-02-27T05:59:59Z]",
                       :count            5}]
             :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
                                                        (t/time-zone-for-id "America/Chicago")))
@@ -110,6 +133,32 @@
             :gap    "+1DAY"
             :before 0
             :after  0}
-           (some #(and (= (:name %) "updated") %) (:facet-range-fields result))))))
+           (first (filter #(= (:name %) "updated") (:facet-range-fields result)))))))
 
 
+(deftest test-pivot-faceting
+  (add-document! sample-doc)
+  (add-document! (assoc sample-doc :id 2 :type "docx"))
+  (commit!)
+  (let [result (meta (search "my"
+                             :rows 0
+                             :facet-date-ranges
+                             [{:field    "updated"
+                               :tag      "ts"
+                               :start    (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
+                                                                            (t/time-zone-for-id "America/Chicago")))
+                               :end      (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 28)
+                                                                            (t/time-zone-for-id "America/Chicago")))
+                               :gap      "+1DAY"
+                               :timezone (t/time-zone-for-id "America/Chicago")
+                               :others   ["before" "after"]}]
+                             :facet-pivot-fields ["{!range=ts}type"]))
+        pivot-fields (:facet-pivot-fields result)]
+    (is (= 1 (count pivot-fields)))
+    (is (get pivot-fields "type"))
+    (is (= 2 (count (get pivot-fields "type"))))
+    (is (= 1 (count (get-in pivot-fields ["type" "docx" "updated"]))))
+    (is (= 1 (:count (first (get-in pivot-fields ["type" "docx" "updated"])))))
+    (is (= 1 (count (get-in pivot-fields ["type" "pdf" "updated"]))))
+    (is (= 1 (:count (first (get-in pivot-fields ["type" "pdf" "updated"])))))
+    #_(clojure.pprint/pprint (:facet-pivot-fields result))))
