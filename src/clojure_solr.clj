@@ -101,6 +101,7 @@
   [name value]
   (format "{!raw f=%s}%s" name value))
 
+
 (defn extract-facet-ranges
   "Explicitly pass facet-date-ranges in case one or more ranges are date ranges, and we need to grab a timezone."
   [query-results facet-date-ranges]
@@ -152,6 +153,27 @@
                      :before (.getBefore r)
                      :after  (.getAfter r)}))
                 (.getFacetRanges query-results))))
+
+(defn extract-pivots
+  [query-results facet-date-ranges]
+  (let [facet-pivot (.getFacetPivot query-results)]
+    (into
+     {}
+     (map
+      (fn [index]
+        (let [facet1-name (.getName facet-pivot index)
+              pivot-fields (.getVal facet-pivot index)
+              ranges (into {}
+                           (for [pivot-field pivot-fields]
+                             (let [facet1-value (.getValue pivot-field)
+                                   facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                               [facet1-value
+                                (into {}
+                                      (map (fn [range]
+                                             [(:name range) (:values range)])
+                                           facet-ranges))])))]
+          [facet1-name ranges]))
+      (range 0 (.size facet-pivot))))))
 
 (defn search
   "Query solr through solrj.
@@ -253,6 +275,7 @@
          :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
          :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
          :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
+         :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
          :results-obj results
          :query-results-obj query-results}))))
 
