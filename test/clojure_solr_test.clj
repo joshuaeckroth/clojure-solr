@@ -136,3 +136,29 @@
            (first (filter #(= (:name %) "updated") (:facet-range-fields result)))))))
 
 
+(deftest test-pivot-faceting
+  (add-document! sample-doc)
+  (add-document! (assoc sample-doc :id 2 :type "docx"))
+  (commit!)
+  (let [result (meta (search "my"
+                             :rows 0
+                             :facet-date-ranges
+                             [{:field    "updated"
+                               :tag      "ts"
+                               :start    (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
+                                                                            (t/time-zone-for-id "America/Chicago")))
+                               :end      (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 28)
+                                                                            (t/time-zone-for-id "America/Chicago")))
+                               :gap      "+1DAY"
+                               :timezone (t/time-zone-for-id "America/Chicago")
+                               :others   ["before" "after"]}]
+                             :facet-pivot-fields ["{!range=ts}type"]))
+        pivot-fields (:facet-pivot-fields result)]
+    (is (= 1 (count pivot-fields)))
+    (is (get pivot-fields "type"))
+    (is (= 2 (count (get pivot-fields "type"))))
+    (is (= 1 (count (get-in pivot-fields ["type" "docx" "updated"]))))
+    (is (= 1 (:count (first (get-in pivot-fields ["type" "docx" "updated"])))))
+    (is (= 1 (count (get-in pivot-fields ["type" "pdf" "updated"]))))
+    (is (= 1 (:count (first (get-in pivot-fields ["type" "pdf" "updated"])))))
+    #_(clojure.pprint/pprint (:facet-pivot-fields result))))
