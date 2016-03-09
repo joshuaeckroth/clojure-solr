@@ -157,23 +157,24 @@
 (defn extract-pivots
   [query-results facet-date-ranges]
   (let [facet-pivot (.getFacetPivot query-results)]
-    (into
-     {}
-     (map
-      (fn [index]
-        (let [facet1-name (.getName facet-pivot index)
-              pivot-fields (.getVal facet-pivot index)
-              ranges (into {}
-                           (for [pivot-field pivot-fields]
-                             (let [facet1-value (.getValue pivot-field)
-                                   facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
-                               [facet1-value
-                                (into {}
-                                      (map (fn [range]
-                                             [(:name range) (:values range)])
-                                           facet-ranges))])))]
-          [facet1-name ranges]))
-      (range 0 (.size facet-pivot))))))
+    (when facet-pivot
+      (into
+       {}
+       (map
+        (fn [index]
+          (let [facet1-name (.getName facet-pivot index)
+                pivot-fields (.getVal facet-pivot index)
+                ranges (into {}
+                             (for [pivot-field pivot-fields]
+                               (let [facet1-value (.getValue pivot-field)
+                                     facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                                 [facet1-value
+                                  (into {}
+                                        (map (fn [range]
+                                               [(:name range) (:values range)])
+                                             facet-ranges))])))]
+            [facet1-name ranges]))
+        (range 0 (.size facet-pivot)))))))
 
 (defn search
   "Query solr through solrj.
@@ -183,7 +184,9 @@
      :rows                  Number of rows to return (default is Solr default: 1000)
      :start                 Offset into query result at which to start returning rows (default 0)
      :fields                Fields to return
-     :facet-fields          Discrete-valued fields to facet
+     :facet-fields          Discrete-valued fields to facet.  Can be a string, keyword, or map containing
+                            {:name ... :prefix ...}.
+     :facet-queries         Vector of facet queries, each encoded in a string.
      :facet-date-ranges     Date fields to facet as a vector or maps.  Each map contains
                              :field   Field name
                              :tag     Optional, for referencing in a pivot facet
@@ -198,14 +201,16 @@
                             date ranges, but start, end and gap must be numbers.
      :facet-mincount        Minimum number of docs in a facet for the bucket to be returned.
      :facet-hier-sep        Useful for path hierarchy token faceting.  A regex, such as \\|.
-     :facet-filters         Solr filter expression on facet values.
+     :facet-filters         Solr filter expression on facet values.  Passed as a map in the form:
+                            {:name 'facet-name' :value 'facet-value' :formatter (fn [name value] ...) }
+                            where :formatter is optional and is used to format the query.
      :facet-pivot-fields    Vector of pivots to compute, each a list of facet fields.
                             If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
                             then the string should be {!range=ts}other-facet.  Otherwise,
                             use comma separated lists: this-facet,other-facet.
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
-  [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges
+  [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
                facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)
@@ -224,8 +229,11 @@
       (when (map? facet-field)
         (if (:prefix facet-field)
           (.setParam query (format "f.%s.facet.prefix" (:name facet-field)) (into-array String [(:prefix facet-field)])))))
+    (doseq [facet-query facet-queries]
+      (.addFacetQuery query facet-query))
     (doseq [{:keys [field start end gap others include hardend missing mincount tag]} facet-date-ranges]
       (if tag
+        ;; This is a workaround for a Solrj bug that causes tagged queries to be improperly formatted.
         (do (.setParam query "facet" true)
             (.add query "facet.range" (into-array String [(format "{!tag=%s}%s" tag field)]))
             (.add query (format "f.%s.facet.range.start" field)
@@ -245,6 +253,7 @@
       (assert (instance? Number end))
       (assert (instance? Number gap))
       (if tag
+        ;; This is a workaround for a Solrj bug that causes tagged queries to be improperly formatted.
         (do (.setParam query "facet" true)
             (.add query "facet.range" (into-array String [(format "{!tag=%s}%s" tag field)]))
             (.add query (format "f.%s.facet.range.start" field) (into-array String [(.toString start)]))
