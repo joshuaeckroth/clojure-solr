@@ -101,6 +101,14 @@
   [name value]
   (format "{!raw f=%s}%s" name value))
 
+(defn format-facet-query
+  [{:keys [name value formatter]}]
+  (if (re-find #"\[" value) ;; range filter
+    (format-standard-filter-query name value)
+    (if formatter
+      (formatter name value)
+      (format-raw-query name value))))
+
 (defn extract-facet-ranges
   "Explicitly pass facet-date-ranges in case one or more ranges are date ranges, and we need to grab a timezone."
   [query-results facet-date-ranges]
@@ -153,8 +161,78 @@
                      :after  (.getAfter r)}))
                 (.getFacetRanges query-results))))
 
-(defn search [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges
-                          facet-mincount facet-hier-sep facet-filters] :as flags}]
+(defn extract-facet-queries
+  [facet-queries result]
+  (filter identity
+          (map (fn [query]
+                 (let [formatted-query (if (string? query) query (format-facet-query query))
+                       count (get result formatted-query)]
+                   (when count
+                     (if (string? query)
+                       {:query query :count count}
+                       (assoc query :count count)))))
+               facet-queries)))
+
+(defn extract-pivots
+  [query-results facet-date-ranges]
+  (let [facet-pivot (.getFacetPivot query-results)]
+    (when facet-pivot
+      (into
+       {}
+       (map
+        (fn [index]
+          (let [facet1-name (.getName facet-pivot index)
+                pivot-fields (.getVal facet-pivot index)
+                ranges (into {}
+                             (for [pivot-field pivot-fields]
+                               (let [facet1-value (.getValue pivot-field)
+                                     facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                                 [facet1-value
+                                  (into {}
+                                        (map (fn [range]
+                                               [(:name range) (:values range)])
+                                             facet-ranges))])))]
+            [facet1-name ranges]))
+        (range 0 (.size facet-pivot)))))))
+
+(defn search
+  "Query solr through solrj.
+   q: Query field
+   Optional keys:
+     :method                :get or :post (default :get)
+     :rows                  Number of rows to return (default is Solr default: 1000)
+     :start                 Offset into query result at which to start returning rows (default 0)
+     :fields                Fields to return
+     :facet-fields          Discrete-valued fields to facet.  Can be a string, keyword, or map containing
+                            {:name ... :prefix ...}.
+     :facet-queries         Vector of facet queries, each encoded in a string or a map of
+                            {:name, :value, :formatter}.  :formatter is optional and defaults to the raw query formatter.
+                            The result is in the :facet-queries response.
+     :facet-date-ranges     Date fields to facet as a vector or maps.  Each map contains
+                             :field   Field name
+                             :tag     Optional, for referencing in a pivot facet
+                             :start   Earliest date (as java.util.Date)
+                             :end     Latest date (as java.util.Date)
+                             :gap     Faceting gap, as String, per Solr (+1HOUR, etc)
+                             :others  Comma-separated string: before,after,between,none,all.  Optional.
+                             :include Comma-separated string: lower,upper,edge,outer,all.  Optional.
+                             :hardend Boolean (See Solr doc).  Optional.
+                             :missing Boolean--return empty buckets if true.  Optional.
+     :facet-numeric-ranges  Numeric fields to facet, as a vector of maps.  Map fields as for
+                            date ranges, but start, end and gap must be numbers.
+     :facet-mincount        Minimum number of docs in a facet for the bucket to be returned.
+     :facet-hier-sep        Useful for path hierarchy token faceting.  A regex, such as \\|.
+     :facet-filters         Solr filter expression on facet values.  Passed as a map in the form:
+                            {:name 'facet-name' :value 'facet-value' :formatter (fn [name value] ...) }
+                            where :formatter is optional and is used to format the query.
+     :facet-pivot-fields    Vector of pivots to compute, each a list of facet fields.
+                            If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
+                            then the string should be {!range=ts}other-facet.  Otherwise,
+                            use comma separated lists: this-facet,other-facet.
+  Returns the query results as the value of the call, with faceting results as metadata.
+  Use (meta result) to get facet data."
+  [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
+               facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)
         facet-result-formatters (into {} (map #(if (map? %)
@@ -172,28 +250,48 @@
       (when (map? facet-field)
         (if (:prefix facet-field)
           (.setParam query (format "f.%s.facet.prefix" (:name facet-field)) (into-array String [(:prefix facet-field)])))))
-    (doseq [{:keys [field start end gap others include hardend missing mincount]} facet-date-ranges]
-      (.addDateRangeFacet query field start end gap)
+    (doseq [facet-query facet-queries]
+      (cond (string? facet-query)
+            (.addFacetQuery query facet-query)
+            (map? facet-query)
+            (.addFacetQuery query (format-facet-query facet-query))
+            :else (throw (Exception. "Invalid facet query.  Must be a string or a map of {:name, :value, :formatter (optional)}"))))
+    (doseq [{:keys [field start end gap others include hardend missing mincount tag]} facet-date-ranges]
+      (if tag
+        ;; This is a workaround for a Solrj bug that causes tagged queries to be improperly formatted.
+        (do (.setParam query "facet" true)
+            (.add query "facet.range" (into-array String [(format "{!tag=%s}%s" tag field)]))
+            (.add query (format "f.%s.facet.range.start" field)
+                  (into-array String [(tformat/unparse (tformat/formatters :date-time-no-ms)
+                                                       (tcoerce/from-date start))]))
+            (.add query (format "f.%s.facet.range.end" field)
+                  (into-array String [(tformat/unparse (tformat/formatters :date-time-no-ms)
+                                                       (tcoerce/from-date end))]))
+            (.add query (format "f.%s.facet.range.gap" field) (into-array String [gap])))
+        (.addDateRangeFacet query field start end gap))
       (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (doseq [{:keys [field start end gap others include hardend missing mincount prefix]} facet-numeric-ranges]
+    (doseq [{:keys [field start end gap others include hardend missing mincount tag]} facet-numeric-ranges]
       (assert (instance? Number start))
       (assert (instance? Number end))
       (assert (instance? Number gap))
-      (.addNumericRangeFacet query field start end gap)
+      (if tag
+        ;; This is a workaround for a Solrj bug that causes tagged queries to be improperly formatted.
+        (do (.setParam query "facet" true)
+            (.add query "facet.range" (into-array String [(format "{!tag=%s}%s" tag field)]))
+            (.add query (format "f.%s.facet.range.start" field) (into-array String [(.toString start)]))
+            (.add query (format "f.%s.facet.range.end" field) (into-array String [(.toString end)]))
+            (.add query (format "f.%s.facet.range.gap" field) (into-array String [(.toString gap)])))
+        (.addNumericRangeFacet query field start end gap))
       (when missing (.setParam query (format "f.%s.facet.missing" field) true))
       (when others (.setParam query (format "f.%s.facet.range.other" field) (into-array String others)))
       (when include (.setParam query (format "f.%s.facet.range.include" field) (into-array String [include])))
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
-    (.addFilterQuery query (into-array String (map (fn [{:keys [name value formatter]}]
-                                                     (if (re-find #"\[" value) ;; range filter
-                                                       (format "%s:%s" name value)
-                                                       (if formatter
-                                                         (formatter name value)
-                                                         (format-raw-query name value))))
-                                                 facet-filters)))
+    (doseq [field facet-pivot-fields]
+      (.addFacetPivotField query (into-array String [field])))
+    (.addFilterQuery query (into-array String (map format-facet-query facet-filters)))
     (.setFacetMinCount query (or facet-mincount 1))
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
@@ -205,6 +303,8 @@
          :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
          :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
          :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
+         :facet-queries (extract-facet-queries facet-queries (.getFacetQuery query-results))
+         :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
          :results-obj results
          :query-results-obj query-results}))))
 
