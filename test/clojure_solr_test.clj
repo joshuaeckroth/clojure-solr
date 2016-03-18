@@ -52,6 +52,12 @@
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
 
+(deftest test-facet-query
+  (do (add-document! sample-doc)
+      (commit!))
+  (is (= [{:name "terms" :value "Vocabulary 1" :count 1}]
+         (:facet-queries (meta (search "my" :facet-queries [{:name "terms" :value "Vocabulary 1"}]))))))
+
 (deftest test-facet-prefix
   (do (add-document! sample-doc)
       (add-document! (assoc sample-doc :id "2" :numeric 11))
