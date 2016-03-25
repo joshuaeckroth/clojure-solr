@@ -248,8 +248,9 @@
                                 (map #(if (map? %) (:name %) (name %)) facet-fields)))
     (doseq [facet-field facet-fields]
       (when (map? facet-field)
-        (if (:prefix facet-field)
-          (.setParam query (format "f.%s.facet.prefix" (:name facet-field)) (into-array String [(:prefix facet-field)])))))
+        (doseq [[key val] facet-field]
+          (.setParam query (format "f.%s.facet.%s" (:name facet-field) (name key))
+                     (into-array String [(str val)])))))
     (doseq [facet-query facet-queries]
       (cond (string? facet-query)
             (.addFacetQuery query facet-query)
