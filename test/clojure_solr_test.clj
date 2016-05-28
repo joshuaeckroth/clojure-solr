@@ -52,6 +52,12 @@
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
 
+(deftest test-quoted-search
+  (do (add-document! sample-doc)
+      (commit!))
+  (is (= sample-doc (first (search "\"my fulltext\""))))
+  (is (empty? (search "\"fulltext my\""))))
+
 (deftest test-facet-query
   (do (add-document! sample-doc)
       (commit!))
