@@ -103,7 +103,7 @@
 
 (defn format-facet-query
   [{:keys [name value formatter]}]
-  (if (re-find #"\[" value) ;; range filter
+  (if (and (string? value) (re-find #"\[" value)) ;; range filter
     (format-standard-filter-query name value)
     (if formatter
       (formatter name value)
