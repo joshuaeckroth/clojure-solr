@@ -255,7 +255,8 @@
       (cond (string? facet-query)
             (.addFacetQuery query facet-query)
             (map? facet-query)
-            (.addFacetQuery query (format-facet-query facet-query))
+            (let [formatted-query (format-facet-query facet-query)]
+              (when (not-empty formatted-query) (.addFacetQuery query formatted-query)))
             :else (throw (Exception. "Invalid facet query.  Must be a string or a map of {:name, :value, :formatter (optional)}"))))
     (doseq [{:keys [field start end gap others include hardend missing mincount tag]} facet-date-ranges]
       (if tag
@@ -292,7 +293,7 @@
       (when hardend (.setParam query (format "f.%s.facet.range.hardend" field) hardend)))
     (doseq [field facet-pivot-fields]
       (.addFacetPivotField query (into-array String [field])))
-    (.addFilterQuery query (into-array String (map format-facet-query facet-filters)))
+    (.addFilterQuery query (into-array String (filter not-empty (map format-facet-query facet-filters))))
     (.setFacetMinCount query (or facet-mincount 1))
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
