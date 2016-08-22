@@ -195,7 +195,7 @@
             [facet1-name ranges]))
         (range 0 (.size facet-pivot)))))))
 
-(defn search
+(defn search*
   "Query solr through solrj.
    q: Query field
    Optional keys:
@@ -231,8 +231,8 @@
                             use comma separated lists: this-facet,other-facet.
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
-  [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
-               facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
+  [q {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
+             facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
   (let [query (SolrQuery. q)
         method (parse-method method)
         facet-result-formatters (into {} (map #(if (map? %)
@@ -309,6 +309,46 @@
          :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
          :results-obj results
          :query-results-obj query-results}))))
+  
+(defn search
+  "Query solr through solrj.
+   q: Query field
+   Optional keys:
+     :method                :get or :post (default :get)
+     :rows                  Number of rows to return (default is Solr default: 1000)
+     :start                 Offset into query result at which to start returning rows (default 0)
+     :fields                Fields to return
+     :facet-fields          Discrete-valued fields to facet.  Can be a string, keyword, or map containing
+                            {:name ... :prefix ...}.
+     :facet-queries         Vector of facet queries, each encoded in a string or a map of
+                            {:name, :value, :formatter}.  :formatter is optional and defaults to the raw query formatter.
+                            The result is in the :facet-queries response.
+     :facet-date-ranges     Date fields to facet as a vector or maps.  Each map contains
+                             :field   Field name
+                             :tag     Optional, for referencing in a pivot facet
+                             :start   Earliest date (as java.util.Date)
+                             :end     Latest date (as java.util.Date)
+                             :gap     Faceting gap, as String, per Solr (+1HOUR, etc)
+                             :others  Comma-separated string: before,after,between,none,all.  Optional.
+                             :include Comma-separated string: lower,upper,edge,outer,all.  Optional.
+                             :hardend Boolean (See Solr doc).  Optional.
+                             :missing Boolean--return empty buckets if true.  Optional.
+     :facet-numeric-ranges  Numeric fields to facet, as a vector of maps.  Map fields as for
+                            date ranges, but start, end and gap must be numbers.
+     :facet-mincount        Minimum number of docs in a facet for the bucket to be returned.
+     :facet-hier-sep        Useful for path hierarchy token faceting.  A regex, such as \\|.
+     :facet-filters         Solr filter expression on facet values.  Passed as a map in the form:
+                            {:name 'facet-name' :value 'facet-value' :formatter (fn [name value] ...) }
+                            where :formatter is optional and is used to format the query.
+     :facet-pivot-fields    Vector of pivots to compute, each a list of facet fields.
+                            If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
+                            then the string should be {!range=ts}other-facet.  Otherwise,
+                            use comma separated lists: this-facet,other-facet.
+  Returns the query results as the value of the call, with faceting results as metadata.
+  Use (meta result) to get facet data."
+  [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
+               facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
+  (search* q flags))
 
 (defn similar [doc similar-count & {:keys [method]}]
   (let [query (SolrQuery. (format "id:%d" (:id doc)))
