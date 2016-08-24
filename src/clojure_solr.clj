@@ -11,6 +11,18 @@
 
 (declare ^:dynamic *connection*)
 
+(def ^:dynamic *trace-fn* nil)
+
+(defn trace
+  [str]
+  (when *trace-fn*
+    (*trace-fn* str)))
+
+(defmacro with-trace
+  [fn & body]
+  `(binding [*trace-fn* ~fn]
+     ~@body))
+
 (defn connect [url]
   (HttpSolrClient. url))
 
@@ -195,10 +207,31 @@
             [facet1-name ranges]))
         (range 0 (.size facet-pivot)))))))
 
+(defn show-query
+  [q flags]
+  (trace "Solr Query:")
+  (trace (format "  Query: %s" q))
+  (trace "  Facet filters:")
+  (if (not-empty (:facet-filters flags))
+    (doseq [ff (:facet-filters flags)]
+      (trace (format "    %s" (format-facet-query ff))))
+    (trace "    none"))
+  (trace "  Facet queries:")
+  (if (not-empty (:facet-queries flags))
+    (doseq [ff (:facet-queries flags)]
+      (trace (format "    %s" (format-facet-query ff))))
+    (trace "    none"))
+  (trace "  Facet fields:")
+  (if (not-empty (:facet-fields flags))
+    (doseq [ff (:facet-fields flags)]
+      (trace (format "    %s" (if (map? ff) (:name ff) ff))))
+    (trace "    none"))
+  )
+
 (defn search*
   "Query solr through solrj.
    q: Query field
-   Optional keys:
+   Optionall keys, passed in a map:
      :method                :get or :post (default :get)
      :rows                  Number of rows to return (default is Solr default: 1000)
      :start                 Offset into query result at which to start returning rows (default 0)
@@ -229,10 +262,12 @@
                             If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
                             then the string should be {!range=ts}other-facet.  Otherwise,
                             use comma separated lists: this-facet,other-facet.
+  Additional keys can be passed, using Solr parameter names as keywords.
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
   [q {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
              facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
+  (show-query q flags)
   (let [query (SolrQuery. q)
         method (parse-method method)
         facet-result-formatters (into {} (map #(if (map? %)
