@@ -277,7 +277,16 @@
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (when (not (empty? fields))
-      (.setFields query (into-array (map name fields))))
+      (cond (string? fields)
+            (.setFields query (into-array (str/split fields #",")))
+            (or (seq? fields) (vector? fields))
+            (.setFields query (into-array
+                               (map (fn [f]
+                                      (cond (string? f) f
+                                            (keyword? f) (name f)
+                                            :else (throw (Exception. (format "Unsupported field name: %s" f)))))
+                                    fields)))
+            :else (throw (Exception. (format "Unsupported :fields parameter format: %s" fields)))))
     (.addFacetField query
                     (into-array String
                                 (map #(if (map? %) (:name %) (name %)) facet-fields)))
@@ -330,8 +339,10 @@
       (.addFacetPivotField query (into-array String [field])))
     (.addFilterQuery query (into-array String (filter not-empty (map format-facet-query facet-filters))))
     (.setFacetMinCount query (or facet-mincount 1))
+    (trace "Executing query")
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
+      (trace "Query complete")
       (with-meta (map doc-to-hash results)
         {:start (.getStart results)
          :rows-set (count results)
