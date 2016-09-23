@@ -12,7 +12,7 @@ project.clj file:
 
 ::
 
-    [cc.artifice/clojure-solr "0.8.24"]
+    [cc.artifice/clojure-solr "1.5.3"]
 
 To build from source, run:
 
