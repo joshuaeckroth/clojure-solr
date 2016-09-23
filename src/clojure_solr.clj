@@ -335,4 +335,6 @@
 
 (defmacro with-connection [conn & body]
   `(binding [*connection* ~conn]
-     ~@body))
+     (try
+       (do ~@body)
+       (finally (.close *connection*)))))
