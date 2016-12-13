@@ -116,12 +116,12 @@
     (is (= {:name "numeric",
             :values
             [{:count 1,
-              :value "[* TO 9]",
+              :value "[* TO 9}",
               :min-inclusive nil,
               :max-noninclusive "9"}
              {:max-noninclusive "12",
               :min-inclusive "9",
-              :value "[9 TO 12]",
+              :value "[9 TO 12}",
               :count 3}
              {:count 1,
               :value "[12 TO *]",
