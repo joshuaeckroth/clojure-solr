@@ -146,13 +146,14 @@
                                                    :else (+ (Double/parseDouble start-val) gap))
                                      end-str (format-range-value end-val nil true)]
                                  {:count (.getCount val)
-                                  :value (format "[%s TO %s]" start-str end-str)
+                                  :value (format (if date-range? "[%s TO %s]" "[%s TO %s}") start-str end-str)
                                   :min-inclusive start-str
                                   :max-noninclusive end-str}))
                              (.getCounts r))
                         values-before (if (and (.getBefore r) (> (.getBefore r) 0))
                                         (concat [{:count (.getBefore r)
-                                                  :value (format "[* TO %s]" (format-range-value (.getStart r) nil true))
+                                                  :value (format (if date-range? "[* TO %s]" "[* TO %s}")
+                                                                 (format-range-value (.getStart r) nil true))
                                                   :min-inclusive nil
                                                   :max-noninclusive (format-range-value (.getStart r) timezone true)}]
                                                 values)
@@ -160,7 +161,8 @@
                         values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
                                               (concat values-before
                                                       [{:count (.getAfter r)
-                                                        :value (format "[%s TO *]" (format-range-value (.getEnd r) nil false))
+                                                        :value (format "[%s TO *]"
+                                                                       (format-range-value (.getEnd r) nil false))
                                                         :min-inclusive (format-range-value (.getEnd r) timezone false)
                                                         :max-noninclusive nil}])
                                               values-before)]
@@ -210,7 +212,7 @@
 (defn show-query
   [q flags]
   (trace "Solr Query:")
-  (trace (format "  Query: %s" q))
+  (trace q)
   (trace "  Facet filters:")
   (if (not-empty (:facet-filters flags))
     (doseq [ff (:facet-filters flags)]
@@ -309,10 +311,10 @@
             (.add query "facet.range" (into-array String [(format "{!tag=%s}%s" tag field)]))
             (.add query (format "f.%s.facet.range.start" field)
                   (into-array String [(tformat/unparse (tformat/formatters :date-time-no-ms)
-                                                       (tcoerce/from-date start))]))
+                                                         (tcoerce/from-date start))]))
             (.add query (format "f.%s.facet.range.end" field)
                   (into-array String [(tformat/unparse (tformat/formatters :date-time-no-ms)
-                                                       (tcoerce/from-date end))]))
+                                                         (tcoerce/from-date end))]))
             (.add query (format "f.%s.facet.range.gap" field) (into-array String [gap])))
         (.addDateRangeFacet query field start end gap))
       (when missing (.setParam query (format "f.%s.facet.missing" field) true))
