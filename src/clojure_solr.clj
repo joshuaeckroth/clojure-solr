@@ -191,23 +191,43 @@
   [query-results facet-date-ranges]
   (let [facet-pivot (.getFacetPivot query-results)]
     (when facet-pivot
-      (into
-       {}
-       (map
-        (fn [index]
-          (let [facet1-name (.getName facet-pivot index)
-                pivot-fields (.getVal facet-pivot index)
-                ranges (into {}
-                             (for [pivot-field pivot-fields]
-                               (let [facet1-value (.getValue pivot-field)
-                                     facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
-                                 [facet1-value
-                                  (into {}
-                                        (map (fn [range]
-                                               [(:name range) (:values range)])
-                                             facet-ranges))])))]
-            [facet1-name ranges]))
-        (range 0 (.size facet-pivot)))))))
+      (merge
+       (into
+        {}
+        (map
+         (fn [index]
+           (let [facet1-name (.getName facet-pivot index)
+                 pivot-fields (.getVal facet-pivot index)
+                 ranges (into {}
+                              (for [pivot-field pivot-fields]
+                                (let [facet1-value (.getValue pivot-field)
+                                      facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                                  [facet1-value
+                                   (into {}
+                                         (map (fn [range]
+                                                [(:name range) (:values range)])
+                                              facet-ranges))])))]
+             [facet1-name ranges]))
+         (range 0 (.size facet-pivot))))
+       (into
+        {}
+        (map
+         (fn [index]
+           (let [facet1-name (.getName facet-pivot index)
+                 pivot-fields (.getVal facet-pivot index)
+                 pivots (into {}
+                              (for [pivot-field pivot-fields]
+                                (let [facet1-value (.getValue pivot-field)
+                                      pivot-values (.getPivot pivot-field)]
+                                  [facet1-value
+                                   (into {}
+                                         (map (fn [pivot]
+                                                [(.getValue pivot) (.getCount pivot)])
+                                              pivot-values))])))]
+             (println facet1-name)
+             [facet1-name pivots]))
+         (range 0 (.size facet-pivot))))
+       ))))
 
 (defn show-query
   [q flags]
