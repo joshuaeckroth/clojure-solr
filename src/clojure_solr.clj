@@ -3,13 +3,16 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
-  (:import (org.apache.solr.client.solrj.impl HttpSolrClient)
+  (:import (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.common.params ModifiableSolrParams)
            (org.apache.solr.util DateMathParser)))
 
+(def ^:private url-details (atom {}))
+
 (declare ^:dynamic *connection*)
+(declare ^:dynamic *middleware*)
 
 (def ^:dynamic *trace-fn* nil)
 
@@ -23,8 +26,33 @@
   `(binding [*trace-fn* ~fn]
      ~@body))
 
+(defn get-url-details
+  [url]
+  (let [details (get @url-details url)]
+    (if details
+      details
+      (let [[_ scheme name password rest] (re-matches #"(https?)://(.+):(.+)@(.*)" url)
+            details (if (and scheme name password rest)
+                      {:clean-url (str scheme "://" rest)
+                       :name name
+                       :password password}
+                      {:clean-url url})]
+        (swap! url-details assoc url details)
+        details))))
+
 (defn connect [url]
-  (HttpSolrClient. url))
+  (let [params (ModifiableSolrParams.)
+        {:keys [clean-urls name password]} (get-url-details url)]
+    (doto params
+      (.set HttpClientUtil/PROP_MAX_CONNECTIONS 128)
+      (.set HttpClientUtil/PROP_MAX_CONNECTIONS_PER_HOST 32)
+      (.set HttpClientUtil/PROP_FOLLOW_REDIRECTS false))
+    (when (and name password)
+      (doto params
+        (.set HttpClientUtil/PROP_BASIC_AUTH_USER name)
+        (.set HttpClientUtil/PROP_BASIC_AUTH_PASS password)))
+    (let [client (HttpClientUtil/createClient params)]
+      (HttpSolrClient. (:clean-url (get-url-details url)) client))))
 
 (defn- make-document [boost-map doc]
   (let [sdoc (SolrInputDocument.)]
@@ -445,4 +473,6 @@
   `(binding [*connection* ~conn]
      (try
        (do ~@body)
-       (finally (.close *connection*)))))
+       (finally (.close (.getHttpClient *connection*))
+                (.close *connection*)))))
+
