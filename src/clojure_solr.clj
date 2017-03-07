@@ -3,18 +3,30 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
-  (:import (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
+  (:import (java.net URI)
+           (java.util Base64)
+           (java.nio.charset Charset)
+           (org.apache.http HttpRequest HttpRequestInterceptor HttpHeaders)
+           (org.apache.http.auth AuthScope UsernamePasswordCredentials)
+           (org.apache.http.client.protocol HttpClientContext)
+           (org.apache.http.impl.auth BasicScheme)
+           (org.apache.http.impl.client BasicCredentialsProvider HttpClientBuilder)
+           (org.apache.http.protocol HttpContext HttpCoreContext)
+           (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.common.params ModifiableSolrParams)
            (org.apache.solr.util DateMathParser)))
 
 (def ^:private url-details (atom {}))
+(def ^:private credentials-provider (BasicCredentialsProvider.))
+(def ^:private credentials (atom {}))
 
 (declare ^:dynamic *connection*)
-(declare ^:dynamic *middleware*)
 
 (def ^:dynamic *trace-fn* nil)
+
+(declare make-param)
 
 (defn trace
   [str]
@@ -26,6 +38,20 @@
   `(binding [*trace-fn* ~fn]
      ~@body))
 
+(defn make-basic-credentials
+  [name password]
+  (UsernamePasswordCredentials. name password))
+
+(defn make-auth-scope
+  [host port]
+  (AuthScope. host port))
+
+(defn set-credentials
+  [uri name password]
+  (.setCredentials credentials-provider
+                   (make-auth-scope (.getHost uri) (.getPort uri))
+                   (make-basic-credentials name password)))
+
 (defn get-url-details
   [url]
   (let [details (get @url-details url)]
@@ -34,25 +60,39 @@
       (let [[_ scheme name password rest] (re-matches #"(https?)://(.+):(.+)@(.*)" url)
             details (if (and scheme name password rest)
                       {:clean-url (str scheme "://" rest)
-                       :name name
-                       :password password}
-                      {:clean-url url})]
+                       :password password
+                       :name name}
+                      {:clean-url url})
+            uri (URI. (:clean-url details))]
         (swap! url-details assoc url details)
+        (when (and name password)
+          (let [host (if (= (.getPort uri) -1)
+                       (str (.getScheme uri) "://" (.getHost uri))
+                       (str (.getScheme uri) "://" (.getHost uri) ":" (.getPort uri)))]
+            ;;(println "**** CLOJURE-SOLR: Adding credentials for host" host)
+            (set-credentials uri name password)
+            (swap! credentials assoc host {:name name :password password})))
         details))))
 
 (defn connect [url]
   (let [params (ModifiableSolrParams.)
-        {:keys [clean-urls name password]} (get-url-details url)]
-    (doto params
-      (.set HttpClientUtil/PROP_MAX_CONNECTIONS 128)
-      (.set HttpClientUtil/PROP_MAX_CONNECTIONS_PER_HOST 32)
-      (.set HttpClientUtil/PROP_FOLLOW_REDIRECTS false))
-    (when (and name password)
-      (doto params
-        (.set HttpClientUtil/PROP_BASIC_AUTH_USER name)
-        (.set HttpClientUtil/PROP_BASIC_AUTH_PASS password)))
-    (let [client (HttpClientUtil/createClient params)]
-      (HttpSolrClient. (:clean-url (get-url-details url)) client))))
+        {:keys [clean-url name password]} (get-url-details url)
+        builder (doto (HttpClientBuilder/create)
+                  (.setDefaultCredentialsProvider credentials-provider)
+                  (.addInterceptorFirst 
+                   (reify 
+                     HttpRequestInterceptor
+                     (^void process [this ^HttpRequest request ^HttpContext context]
+                      (let [auth-state (.getAttribute context HttpClientContext/TARGET_AUTH_STATE)]
+                        (when (nil? (.getAuthScheme auth-state))
+                          (let [target-host (.getAttribute context HttpCoreContext/HTTP_TARGET_HOST)
+                                auth-scope (make-auth-scope (.getHostName target-host) (.getPort target-host))
+                                creds (.getCredentials credentials-provider auth-scope)]
+                            ;;(println "**** CLOJURE-SOLR: HttpRequestInterceptor here.  Looking for" auth-scope)
+                            (when creds
+                              (.update auth-state (BasicScheme.) creds)))))))))
+        client (.build builder)]
+    (HttpSolrClient. clean-url client)))
 
 (defn- make-document [boost-map doc]
   (let [sdoc (SolrInputDocument.)]
@@ -252,7 +292,7 @@
                                          (map (fn [pivot]
                                                 [(.getValue pivot) (.getCount pivot)])
                                               pivot-values))])))]
-             (println facet1-name)
+             ;;(println facet1-name)
              [facet1-name pivots]))
          (range 0 (.size facet-pivot))))
        ))))
