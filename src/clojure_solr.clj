@@ -3,15 +3,30 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
-  (:import (org.apache.solr.client.solrj.impl HttpSolrClient)
+  (:import (java.net URI)
+           (java.util Base64)
+           (java.nio.charset Charset)
+           (org.apache.http HttpRequest HttpRequestInterceptor HttpHeaders)
+           (org.apache.http.auth AuthScope UsernamePasswordCredentials)
+           (org.apache.http.client.protocol HttpClientContext)
+           (org.apache.http.impl.auth BasicScheme)
+           (org.apache.http.impl.client BasicCredentialsProvider HttpClientBuilder)
+           (org.apache.http.protocol HttpContext HttpCoreContext)
+           (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.common.params ModifiableSolrParams)
            (org.apache.solr.util DateMathParser)))
 
+(def ^:private url-details (atom {}))
+(def ^:private credentials-provider (BasicCredentialsProvider.))
+(def ^:private credentials (atom {}))
+
 (declare ^:dynamic *connection*)
 
 (def ^:dynamic *trace-fn* nil)
+
+(declare make-param)
 
 (defn trace
   [str]
@@ -23,8 +38,61 @@
   `(binding [*trace-fn* ~fn]
      ~@body))
 
+(defn make-basic-credentials
+  [name password]
+  (UsernamePasswordCredentials. name password))
+
+(defn make-auth-scope
+  [host port]
+  (AuthScope. host port))
+
+(defn set-credentials
+  [uri name password]
+  (.setCredentials credentials-provider
+                   (make-auth-scope (.getHost uri) (.getPort uri))
+                   (make-basic-credentials name password)))
+
+(defn get-url-details
+  [url]
+  (let [details (get @url-details url)]
+    (if details
+      details
+      (let [[_ scheme name password rest] (re-matches #"(https?)://(.+):(.+)@(.*)" url)
+            details (if (and scheme name password rest)
+                      {:clean-url (str scheme "://" rest)
+                       :password password
+                       :name name}
+                      {:clean-url url})
+            uri (URI. (:clean-url details))]
+        (swap! url-details assoc url details)
+        (when (and name password)
+          (let [host (if (= (.getPort uri) -1)
+                       (str (.getScheme uri) "://" (.getHost uri))
+                       (str (.getScheme uri) "://" (.getHost uri) ":" (.getPort uri)))]
+            ;;(println "**** CLOJURE-SOLR: Adding credentials for host" host)
+            (set-credentials uri name password)
+            (swap! credentials assoc host {:name name :password password})))
+        details))))
+
 (defn connect [url]
-  (HttpSolrClient. url))
+  (let [params (ModifiableSolrParams.)
+        {:keys [clean-url name password]} (get-url-details url)
+        builder (doto (HttpClientBuilder/create)
+                  (.setDefaultCredentialsProvider credentials-provider)
+                  (.addInterceptorFirst 
+                   (reify 
+                     HttpRequestInterceptor
+                     (^void process [this ^HttpRequest request ^HttpContext context]
+                      (let [auth-state (.getAttribute context HttpClientContext/TARGET_AUTH_STATE)]
+                        (when (nil? (.getAuthScheme auth-state))
+                          (let [target-host (.getAttribute context HttpCoreContext/HTTP_TARGET_HOST)
+                                auth-scope (make-auth-scope (.getHostName target-host) (.getPort target-host))
+                                creds (.getCredentials credentials-provider auth-scope)]
+                            ;;(println "**** CLOJURE-SOLR: HttpRequestInterceptor here.  Looking for" auth-scope)
+                            (when creds
+                              (.update auth-state (BasicScheme.) creds)))))))))
+        client (.build builder)]
+    (HttpSolrClient. clean-url client)))
 
 (defn- make-document [boost-map doc]
   (let [sdoc (SolrInputDocument.)]
@@ -191,23 +259,43 @@
   [query-results facet-date-ranges]
   (let [facet-pivot (.getFacetPivot query-results)]
     (when facet-pivot
-      (into
-       {}
-       (map
-        (fn [index]
-          (let [facet1-name (.getName facet-pivot index)
-                pivot-fields (.getVal facet-pivot index)
-                ranges (into {}
-                             (for [pivot-field pivot-fields]
-                               (let [facet1-value (.getValue pivot-field)
-                                     facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
-                                 [facet1-value
-                                  (into {}
-                                        (map (fn [range]
-                                               [(:name range) (:values range)])
-                                             facet-ranges))])))]
-            [facet1-name ranges]))
-        (range 0 (.size facet-pivot)))))))
+      (merge
+       (into
+        {}
+        (map
+         (fn [index]
+           (let [facet1-name (.getName facet-pivot index)
+                 pivot-fields (.getVal facet-pivot index)
+                 ranges (into {}
+                              (for [pivot-field pivot-fields]
+                                (let [facet1-value (.getValue pivot-field)
+                                      facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                                  [facet1-value
+                                   (into {}
+                                         (map (fn [range]
+                                                [(:name range) (:values range)])
+                                              facet-ranges))])))]
+             [facet1-name ranges]))
+         (range 0 (.size facet-pivot))))
+       (into
+        {}
+        (map
+         (fn [index]
+           (let [facet1-name (.getName facet-pivot index)
+                 pivot-fields (.getVal facet-pivot index)
+                 pivots (into {}
+                              (for [pivot-field pivot-fields]
+                                (let [facet1-value (.getValue pivot-field)
+                                      pivot-values (.getPivot pivot-field)]
+                                  [facet1-value
+                                   (into {}
+                                         (map (fn [pivot]
+                                                [(.getValue pivot) (.getCount pivot)])
+                                              pivot-values))])))]
+             ;;(println facet1-name)
+             [facet1-name pivots]))
+         (range 0 (.size facet-pivot))))
+       ))))
 
 (defn show-query
   [q flags]
@@ -425,4 +513,6 @@
   `(binding [*connection* ~conn]
      (try
        (do ~@body)
-       (finally (.close *connection*)))))
+       (finally (.close (.getHttpClient *connection*))
+                (.close *connection*)))))
+

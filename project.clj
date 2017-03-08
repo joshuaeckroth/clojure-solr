@@ -1,4 +1,4 @@
-(defproject cc.artifice/clojure-solr "1.5.7"
+(defproject cc.artifice/clojure-solr "1.6.0"
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.apache.solr/solr-solrj "5.3.1"]
                  [org.apache.solr/solr-core "5.3.1" :exclusions [commons-fileupload]]
