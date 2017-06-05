@@ -13,6 +13,7 @@
            (org.apache.http.impl.client BasicCredentialsProvider HttpClientBuilder)
            (org.apache.http.protocol HttpContext HttpCoreContext)
            (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
+           (org.apache.solr.client.solrj.embedded EmbeddedSolrServer)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.common.params ModifiableSolrParams)
@@ -513,6 +514,5 @@
   `(binding [*connection* ~conn]
      (try
        (do ~@body)
-       (finally (.close (.getHttpClient *connection*))
-                (.close *connection*)))))
+       (finally (.close *connection*)))))
 
