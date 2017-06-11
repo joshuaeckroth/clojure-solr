@@ -4,7 +4,7 @@
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
   (:import (java.net URI)
-           (java.util Base64)
+           (java.util Base64 HashMap)
            (java.nio.charset Charset)
            (org.apache.http HttpRequest HttpRequestInterceptor HttpHeaders)
            (org.apache.http.auth AuthScope UsernamePasswordCredentials)
@@ -486,6 +486,21 @@
   [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
                facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
   (search* q flags))
+
+(defn atomically-update!
+  "Atomically update a solr document:
+    doc: document fetched from solr previously, or the id of such a document (must not be a map)
+    unique-key: Name of the attribute that is the document's unique key
+    changes: Vector of maps containing :attribute, :func [one of :set, :inc, :add], and :value.
+   e.g.
+     (atomically-update! doc \"cdid\" [{:attribute :client :func :set :value \"darcy\"}])"
+  [doc unique-key-field changes]
+  (let [document (SolrInputDocument.)]
+    (.addField document (name unique-key-field) (if (map? doc) (get doc unique-key-field) doc))
+    (doseq [{:keys [attribute func value]} changes]
+      (.addField document (name attribute) (doto (HashMap. 1) (.put (name func) value))))
+    (.add *connection* document)))
+  
 
 (defn similar [doc similar-count & {:keys [method]}]
   (let [query (SolrQuery. (format "id:%d" (:id doc)))
