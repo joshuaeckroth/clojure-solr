@@ -75,6 +75,7 @@
          lexicographic ordering isn't equal to the numeric ordering) -->
     <fieldType name="integer" class="solr.TrieIntField" omitNorms="true"/>
     <fieldType name="long" class="solr.TrieLongField" omitNorms="true"/>
+    <fieldType name="slong" class="solr.TrieLongField" omitNorms="true" sortMissingLast="true"/>
     <fieldType name="float" class="solr.TrieFloatField" omitNorms="true"/>
     <fieldType name="double" class="solr.TrieDoubleField" omitNorms="true"/>
 
@@ -258,6 +259,7 @@
    -->
 
    <field name="id" type="string" indexed="true" stored="true" required="true" multiValued="false" omitNorms="true" /> 
+   <field name="_version_" type="slong" default="0" docValues="true" multiValued="false" indexed="true" stored="true"/>
    <field name="title" type="text" indexed="true" stored="true" />
    <field name="fulltext" type="text" indexed="true" stored="true" />
    <field name="created" type="date" indexed="true" stored="true" omitNorms="true" />

@@ -4,7 +4,7 @@
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
   (:import (java.net URI)
-           (java.util Base64)
+           (java.util Base64 HashMap)
            (java.nio.charset Charset)
            (org.apache.http HttpRequest HttpRequestInterceptor HttpHeaders)
            (org.apache.http.auth AuthScope UsernamePasswordCredentials)
@@ -13,9 +13,10 @@
            (org.apache.http.impl.client BasicCredentialsProvider HttpClientBuilder)
            (org.apache.http.protocol HttpContext HttpCoreContext)
            (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
+           (org.apache.solr.client.solrj.embedded EmbeddedSolrServer)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
-           (org.apache.solr.common.params ModifiableSolrParams)
+           (org.apache.solr.common.params ModifiableSolrParams CursorMarkParams)
            (org.apache.solr.util DateMathParser)))
 
 (def ^:private url-details (atom {}))
@@ -321,7 +322,7 @@
 (defn search*
   "Query solr through solrj.
    q: Query field
-   Optionall keys, passed in a map:
+   Optional keys, passed in a map:
      :method                :get or :post (default :get)
      :rows                  Number of rows to return (default is Solr default: 1000)
      :start                 Offset into query result at which to start returning rows (default 0)
@@ -352,11 +353,13 @@
                             If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
                             then the string should be {!range=ts}other-facet.  Otherwise,
                             use comma separated lists: this-facet,other-facet.
+     :cursor-mark           true -- initial cursor; else a previous cursor value from 
+                            (:next-cursor-mark (meta result))
   Additional keys can be passed, using Solr parameter names as keywords.
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
   [q {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
-             facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
+             facet-mincount facet-hier-sep facet-filters facet-pivot-fields cursor-mark] :as flags}]
   (show-query q flags)
   (let [query (SolrQuery. q)
         method (parse-method method)
@@ -429,22 +432,33 @@
       (.addFacetPivotField query (into-array String [field])))
     (.addFilterQuery query (into-array String (filter not-empty (map format-facet-query facet-filters))))
     (.setFacetMinCount query (or facet-mincount 1))
+    (cond (= cursor-mark true)
+          (.setParam query ^String (CursorMarkParams/CURSOR_MARK_PARAM) (into-array String [(CursorMarkParams/CURSOR_MARK_START)]))
+          (not (nil? cursor-mark))
+          (.setParam query ^String (CursorMarkParams/CURSOR_MARK_PARAM) (into-array String [cursor-mark])))
     (trace "Executing query")
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
       (trace "Query complete")
       (with-meta (map doc-to-hash results)
-        {:start (.getStart results)
-         :rows-set (count results)
-         :rows-total (.getNumFound results)
-         :highlighting (.getHighlighting query-results)
-         :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
-         :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
-         :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
-         :facet-queries (extract-facet-queries facet-queries (.getFacetQuery query-results))
-         :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
-         :results-obj results
-         :query-results-obj query-results}))))
+        (merge
+         (when cursor-mark
+           (let [next  (.getNextCursorMark query-results)]
+             {:next-cursor-mark next
+              :cursor-done (.equals next (if (= cursor-mark true)
+                                           (CursorMarkParams/CURSOR_MARK_START)
+                                           cursor-mark))}))
+         {:start (.getStart results)
+          :rows-set (count results)
+          :rows-total (.getNumFound results)
+          :highlighting (.getHighlighting query-results)
+          :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
+          :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
+          :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
+          :facet-queries (extract-facet-queries facet-queries (.getFacetQuery query-results))
+          :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
+          :results-obj results
+          :query-results-obj query-results})))))
   
 (defn search
   "Query solr through solrj.
@@ -480,11 +494,28 @@
                             If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
                             then the string should be {!range=ts}other-facet.  Otherwise,
                             use comma separated lists: this-facet,other-facet.
+     :cursor-mark           true -- initial cursor; else a previous cursor value from 
+                            (:next-cursor-mark (meta result))
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
   [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
                facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
   (search* q flags))
+
+(defn atomically-update!
+  "Atomically update a solr document:
+    doc: document fetched from solr previously, or the id of such a document (must not be a map)
+    unique-key: Name of the attribute that is the document's unique key
+    changes: Vector of maps containing :attribute, :func [one of :set, :inc, :add], and :value.
+   e.g.
+     (atomically-update! doc \"cdid\" [{:attribute :client :func :set :value \"darcy\"}])"
+  [doc unique-key-field changes]
+  (let [document (SolrInputDocument.)]
+    (.addField document (name unique-key-field) (if (map? doc) (get doc unique-key-field) doc))
+    (doseq [{:keys [attribute func value]} changes]
+      (.addField document (name attribute) (doto (HashMap. 1) (.put (name func) value))))
+    (.add *connection* document)))
+  
 
 (defn similar [doc similar-count & {:keys [method]}]
   (let [query (SolrQuery. (format "id:%d" (:id doc)))
@@ -513,6 +544,5 @@
   `(binding [*connection* ~conn]
      (try
        (do ~@body)
-       (finally (.close (.getHttpClient *connection*))
-                (.close *connection*)))))
+       (finally (.close *connection*)))))
 
