@@ -52,6 +52,15 @@
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
 
+(deftest test-update-document!
+  (do (add-document! sample-doc)
+      (commit!))
+  (atomically-update! 1 :id [{:attribute :title :func :set :value "my new title"}])
+  (commit!)
+  (let [search-result (search "my")]
+    (is (= (get (first search-result) :title) "my new title"))))
+  
+
 (deftest test-quoted-search
   (do (add-document! sample-doc)
       (commit!))
