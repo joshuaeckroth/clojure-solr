@@ -52,6 +52,15 @@
          (:facet-fields
            (meta (search "my" :facet-fields [:terms] :facet-hier-sep #"/"))))))
 
+(deftest test-update-document!
+  (do (add-document! sample-doc)
+      (commit!))
+  (atomically-update! 1 :id [{:attribute :title :func :set :value "my new title"}])
+  (commit!)
+  (let [search-result (search "my")]
+    (is (= (get (first search-result) :title) "my new title"))))
+  
+
 (deftest test-quoted-search
   (do (add-document! sample-doc)
       (commit!))
@@ -116,12 +125,12 @@
     (is (= {:name "numeric",
             :values
             [{:count 1,
-              :value "[* TO 9]",
+              :value "[* TO 9}",
               :min-inclusive nil,
               :max-noninclusive "9"}
              {:max-noninclusive "12",
               :min-inclusive "9",
-              :value "[9 TO 12]",
+              :value "[9 TO 12}",
               :count 3}
              {:count 1,
               :value "[12 TO *]",

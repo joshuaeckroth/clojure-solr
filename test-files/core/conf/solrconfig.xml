@@ -34,6 +34,9 @@
   <!-- the default high-performance update handler -->
   <updateHandler class="solr.DirectUpdateHandler2">
 
+    <updateLog>
+      <str name="dir">${solr.core.dataDir}/log</str>
+    </updateLog>
     <!-- A prefix of "solr." for class names is an alias that
          causes solr to search appropriate packages, including
          org.apache.solr.(search|update|request|core|analysis)

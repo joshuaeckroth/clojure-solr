@@ -3,15 +3,31 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
-  (:import (org.apache.solr.client.solrj.impl HttpSolrClient)
+  (:import (java.net URI)
+           (java.util Base64 HashMap)
+           (java.nio.charset Charset)
+           (org.apache.http HttpRequest HttpRequestInterceptor HttpHeaders)
+           (org.apache.http.auth AuthScope UsernamePasswordCredentials)
+           (org.apache.http.client.protocol HttpClientContext)
+           (org.apache.http.impl.auth BasicScheme)
+           (org.apache.http.impl.client BasicCredentialsProvider HttpClientBuilder)
+           (org.apache.http.protocol HttpContext HttpCoreContext)
+           (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
+           (org.apache.solr.client.solrj.embedded EmbeddedSolrServer)
            (org.apache.solr.common SolrInputDocument)
            (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
-           (org.apache.solr.common.params ModifiableSolrParams)
+           (org.apache.solr.common.params ModifiableSolrParams CursorMarkParams)
            (org.apache.solr.util DateMathParser)))
+
+(def ^:private url-details (atom {}))
+(def ^:private credentials-provider (BasicCredentialsProvider.))
+(def ^:private credentials (atom {}))
 
 (declare ^:dynamic *connection*)
 
 (def ^:dynamic *trace-fn* nil)
+
+(declare make-param)
 
 (defn trace
   [str]
@@ -23,8 +39,61 @@
   `(binding [*trace-fn* ~fn]
      ~@body))
 
+(defn make-basic-credentials
+  [name password]
+  (UsernamePasswordCredentials. name password))
+
+(defn make-auth-scope
+  [host port]
+  (AuthScope. host port))
+
+(defn set-credentials
+  [uri name password]
+  (.setCredentials credentials-provider
+                   (make-auth-scope (.getHost uri) (.getPort uri))
+                   (make-basic-credentials name password)))
+
+(defn get-url-details
+  [url]
+  (let [details (get @url-details url)]
+    (if details
+      details
+      (let [[_ scheme name password rest] (re-matches #"(https?)://(.+):(.+)@(.*)" url)
+            details (if (and scheme name password rest)
+                      {:clean-url (str scheme "://" rest)
+                       :password password
+                       :name name}
+                      {:clean-url url})
+            uri (URI. (:clean-url details))]
+        (swap! url-details assoc url details)
+        (when (and name password)
+          (let [host (if (= (.getPort uri) -1)
+                       (str (.getScheme uri) "://" (.getHost uri))
+                       (str (.getScheme uri) "://" (.getHost uri) ":" (.getPort uri)))]
+            ;;(println "**** CLOJURE-SOLR: Adding credentials for host" host)
+            (set-credentials uri name password)
+            (swap! credentials assoc host {:name name :password password})))
+        details))))
+
 (defn connect [url]
-  (HttpSolrClient. url))
+  (let [params (ModifiableSolrParams.)
+        {:keys [clean-url name password]} (get-url-details url)
+        builder (doto (HttpClientBuilder/create)
+                  (.setDefaultCredentialsProvider credentials-provider)
+                  (.addInterceptorFirst 
+                   (reify 
+                     HttpRequestInterceptor
+                     (^void process [this ^HttpRequest request ^HttpContext context]
+                      (let [auth-state (.getAttribute context HttpClientContext/TARGET_AUTH_STATE)]
+                        (when (nil? (.getAuthScheme auth-state))
+                          (let [target-host (.getAttribute context HttpCoreContext/HTTP_TARGET_HOST)
+                                auth-scope (make-auth-scope (.getHostName target-host) (.getPort target-host))
+                                creds (.getCredentials credentials-provider auth-scope)]
+                            ;;(println "**** CLOJURE-SOLR: HttpRequestInterceptor here.  Looking for" auth-scope)
+                            (when creds
+                              (.update auth-state (BasicScheme.) creds)))))))))
+        client (.build builder)]
+    (HttpSolrClient. clean-url client)))
 
 (defn- make-document [boost-map doc]
   (let [sdoc (SolrInputDocument.)]
@@ -191,23 +260,43 @@
   [query-results facet-date-ranges]
   (let [facet-pivot (.getFacetPivot query-results)]
     (when facet-pivot
-      (into
-       {}
-       (map
-        (fn [index]
-          (let [facet1-name (.getName facet-pivot index)
-                pivot-fields (.getVal facet-pivot index)
-                ranges (into {}
-                             (for [pivot-field pivot-fields]
-                               (let [facet1-value (.getValue pivot-field)
-                                     facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
-                                 [facet1-value
-                                  (into {}
-                                        (map (fn [range]
-                                               [(:name range) (:values range)])
-                                             facet-ranges))])))]
-            [facet1-name ranges]))
-        (range 0 (.size facet-pivot)))))))
+      (merge
+       (into
+        {}
+        (map
+         (fn [index]
+           (let [facet1-name (.getName facet-pivot index)
+                 pivot-fields (.getVal facet-pivot index)
+                 ranges (into {}
+                              (for [pivot-field pivot-fields]
+                                (let [facet1-value (.getValue pivot-field)
+                                      facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                                  [facet1-value
+                                   (into {}
+                                         (map (fn [range]
+                                                [(:name range) (:values range)])
+                                              facet-ranges))])))]
+             [facet1-name ranges]))
+         (range 0 (.size facet-pivot))))
+       (into
+        {}
+        (map
+         (fn [index]
+           (let [facet1-name (.getName facet-pivot index)
+                 pivot-fields (.getVal facet-pivot index)
+                 pivots (into {}
+                              (for [pivot-field pivot-fields]
+                                (let [facet1-value (.getValue pivot-field)
+                                      pivot-values (.getPivot pivot-field)]
+                                  [facet1-value
+                                   (into {}
+                                         (map (fn [pivot]
+                                                [(.getValue pivot) (.getCount pivot)])
+                                              pivot-values))])))]
+             ;;(println facet1-name)
+             [facet1-name pivots]))
+         (range 0 (.size facet-pivot))))
+       ))))
 
 (defn show-query
   [q flags]
@@ -233,7 +322,7 @@
 (defn search*
   "Query solr through solrj.
    q: Query field
-   Optionall keys, passed in a map:
+   Optional keys, passed in a map:
      :method                :get or :post (default :get)
      :rows                  Number of rows to return (default is Solr default: 1000)
      :start                 Offset into query result at which to start returning rows (default 0)
@@ -264,11 +353,13 @@
                             If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
                             then the string should be {!range=ts}other-facet.  Otherwise,
                             use comma separated lists: this-facet,other-facet.
+     :cursor-mark           true -- initial cursor; else a previous cursor value from 
+                            (:next-cursor-mark (meta result))
   Additional keys can be passed, using Solr parameter names as keywords.
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
   [q {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
-             facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
+             facet-mincount facet-hier-sep facet-filters facet-pivot-fields cursor-mark] :as flags}]
   (show-query q flags)
   (let [query (SolrQuery. q)
         method (parse-method method)
@@ -341,22 +432,33 @@
       (.addFacetPivotField query (into-array String [field])))
     (.addFilterQuery query (into-array String (filter not-empty (map format-facet-query facet-filters))))
     (.setFacetMinCount query (or facet-mincount 1))
+    (cond (= cursor-mark true)
+          (.setParam query ^String (CursorMarkParams/CURSOR_MARK_PARAM) (into-array String [(CursorMarkParams/CURSOR_MARK_START)]))
+          (not (nil? cursor-mark))
+          (.setParam query ^String (CursorMarkParams/CURSOR_MARK_PARAM) (into-array String [cursor-mark])))
     (trace "Executing query")
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
       (trace "Query complete")
       (with-meta (map doc-to-hash results)
-        {:start (.getStart results)
-         :rows-set (count results)
-         :rows-total (.getNumFound results)
-         :highlighting (.getHighlighting query-results)
-         :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
-         :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
-         :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
-         :facet-queries (extract-facet-queries facet-queries (.getFacetQuery query-results))
-         :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
-         :results-obj results
-         :query-results-obj query-results}))))
+        (merge
+         (when cursor-mark
+           (let [next  (.getNextCursorMark query-results)]
+             {:next-cursor-mark next
+              :cursor-done (.equals next (if (= cursor-mark true)
+                                           (CursorMarkParams/CURSOR_MARK_START)
+                                           cursor-mark))}))
+         {:start (.getStart results)
+          :rows-set (count results)
+          :rows-total (.getNumFound results)
+          :highlighting (.getHighlighting query-results)
+          :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
+          :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
+          :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
+          :facet-queries (extract-facet-queries facet-queries (.getFacetQuery query-results))
+          :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
+          :results-obj results
+          :query-results-obj query-results})))))
   
 (defn search
   "Query solr through solrj.
@@ -392,11 +494,28 @@
                             If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges)  
                             then the string should be {!range=ts}other-facet.  Otherwise,
                             use comma separated lists: this-facet,other-facet.
+     :cursor-mark           true -- initial cursor; else a previous cursor value from 
+                            (:next-cursor-mark (meta result))
   Returns the query results as the value of the call, with faceting results as metadata.
   Use (meta result) to get facet data."
   [q & {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
                facet-mincount facet-hier-sep facet-filters facet-pivot-fields] :as flags}]
   (search* q flags))
+
+(defn atomically-update!
+  "Atomically update a solr document:
+    doc: document fetched from solr previously, or the id of such a document (must not be a map)
+    unique-key: Name of the attribute that is the document's unique key
+    changes: Vector of maps containing :attribute, :func [one of :set, :inc, :add], and :value.
+   e.g.
+     (atomically-update! doc \"cdid\" [{:attribute :client :func :set :value \"darcy\"}])"
+  [doc unique-key-field changes]
+  (let [document (SolrInputDocument.)]
+    (.addField document (name unique-key-field) (if (map? doc) (get doc unique-key-field) doc))
+    (doseq [{:keys [attribute func value]} changes]
+      (.addField document (name attribute) (doto (HashMap. 1) (.put (name func) value))))
+    (.add *connection* document)))
+  
 
 (defn similar [doc similar-count & {:keys [method]}]
   (let [query (SolrQuery. (format "id:%d" (:id doc)))
@@ -426,3 +545,4 @@
      (try
        (do ~@body)
        (finally (.close *connection*)))))
+
