@@ -1,5 +1,6 @@
 (ns clojure-solr
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [clojure.pprint :as pprint])
   (:require [clj-time.core :as t])
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
@@ -317,6 +318,11 @@
     (doseq [ff (:facet-fields flags)]
       (trace (format "    %s" (if (map? ff) (:name ff) ff))))
     (trace "    none"))
+  (let [other (dissoc flags :facet-filters :facet-qieries :facet-fields)]
+    (when (not-empty other)
+      (trace "  Other parameters to Solr:")
+      (doseq [[k v] other]
+        (trace (format "  %s: %s" k v)))))
   )
 
 (defn search*
@@ -440,6 +446,8 @@
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
       (trace "Query complete")
+      (when (:debugQuery flags)
+        (trace (.getDebugMap query-results)))
       (with-meta (map doc-to-hash results)
         (merge
          (when cursor-mark
@@ -448,6 +456,8 @@
               :cursor-done (.equals next (if (= cursor-mark true)
                                            (CursorMarkParams/CURSOR_MARK_START)
                                            cursor-mark))}))
+         (when (:debugQuery flags)
+           {:debug (.getDebugMap query-results)})
          {:start (.getStart results)
           :rows-set (count results)
           :rows-total (.getNumFound results)
