@@ -316,7 +316,7 @@
   (trace "  Facet fields:")
   (if (not-empty (:facet-fields flags))
     (doseq [ff (:facet-fields flags)]
-      (trace (format "    %s" (if (map? ff) (:name ff) ff))))
+      (trace (format "    %s" (if (map? ff) (pr-str ff) ff))))
     (trace "    none"))
   (let [other (dissoc flags :facet-filters :facet-qieries :facet-fields)]
     (when (not-empty other)
@@ -391,7 +391,8 @@
                                 (map #(if (map? %) (:name %) (name %)) facet-fields)))
     (doseq [facet-field facet-fields]
       (when (map? facet-field)
-        (doseq [[key val] facet-field]
+        (doseq [[key val] facet-field
+                :when (not= key :name)]
           (.setParam query (format "f.%s.facet.%s" (:name facet-field) (name key))
                      (into-array String [(str val)])))))
     (doseq [facet-query facet-queries]
@@ -458,6 +459,18 @@
                                            cursor-mark))}))
          (when (:debugQuery flags)
            {:debug (.getDebugMap query-results)})
+         (when (.getFieldStatsInfo query-results)
+           {:statistics
+            (into {}
+                  (for [[field info] (.getFieldStatsInfo query-results)]
+                    [field {:min (.getMin info)
+                            :max (.getMax info)
+                            :mean (.getMean info)
+                            :stddev (.getStddev info)
+                            :sum (.getSum info)
+                            :count (.getCount info)
+                            :missing (.getMissing info)
+                            }]))})
          {:start (.getStart results)
           :rows-set (count results)
           :rows-total (.getNumFound results)
