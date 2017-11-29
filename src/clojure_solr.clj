@@ -5,7 +5,7 @@
   (:require [clj-time.format :as tformat])
   (:require [clj-time.coerce :as tcoerce])
   (:import (java.net URI)
-           (java.util Base64 HashMap)
+           (java.util Base64 HashMap List ArrayList)
            (java.nio.charset Charset)
            (org.apache.http HttpRequest HttpRequestInterceptor HttpHeaders)
            (org.apache.http.auth AuthScope UsernamePasswordCredentials)
@@ -13,11 +13,13 @@
            (org.apache.http.impl.auth BasicScheme)
            (org.apache.http.impl.client BasicCredentialsProvider HttpClientBuilder)
            (org.apache.http.protocol HttpContext HttpCoreContext)
+           (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.client.solrj.impl HttpSolrClient HttpClientUtil)
            (org.apache.solr.client.solrj.embedded EmbeddedSolrServer)
+           (org.apache.solr.client.solrj.response QueryResponse FacetField PivotField RangeFacet RangeFacet$Count RangeFacet$Date)
            (org.apache.solr.common SolrInputDocument)
-           (org.apache.solr.client.solrj SolrQuery SolrRequest$METHOD)
            (org.apache.solr.common.params ModifiableSolrParams CursorMarkParams)
+           (org.apache.solr.common.util NamedList)
            (org.apache.solr.util DateMathParser)))
 
 (def ^:private url-details (atom {}))
@@ -141,22 +143,23 @@
 
 (defn extract-facets
   [query-results facet-hier-sep limiting? formatters]
-  (map (fn [f] {:name (.getName f)
-                :values (sort-by :path
-                                 (map (fn [v]
-                                        (let [result
-                                              (merge
-                                               {:value (.getName v)
-                                                :count (.getCount v)}
-                                               (when-let [split-path (and facet-hier-sep (str/split (.getName v) facet-hier-sep))]
-                                                 {:split-path split-path
-                                                  :title (last split-path)
-                                                  :depth (count split-path)}))]
-                                          ((get formatters (.getName f) identity) result)))
-                                      (.getValues f)))})
-     (if limiting?
-       (.getLimitingFacets query-results)
-       (.getFacetFields query-results))))
+  (map (fn [^FacetField f]
+         {:name (.getName f)
+          :values (sort-by :path
+                           (map (fn [v]
+                                  (let [result
+                                        (merge
+                                         {:value (.getName v)
+                                          :count (.getCount v)}
+                                         (when-let [split-path (and facet-hier-sep (str/split (.getName v) facet-hier-sep))]
+                                           {:split-path split-path
+                                            :title (last split-path)
+                                            :depth (count split-path)}))]
+                                    ((get formatters (.getName f) identity) result)))
+                                (.getValues f)))})
+       ^List (if limiting?
+               (.getLimitingFacets query-results)
+               (.getFacetFields query-results))))
 
 (def date-time-formatter
   (tformat/formatters :date-time-no-ms))
@@ -195,7 +198,7 @@
   "Explicitly pass facet-date-ranges in case one or more ranges are date ranges, and we need to grab a timezone."
   [query-results facet-date-ranges]
   (sort-by :name
-           (map (fn [r]
+           (map (fn [^RangeFacet r]
                   (let [date-range? (some (fn [{:keys [field]}] (= field (.getName r)))
                                           facet-date-ranges)
                         timezone (:timezone (first (filter (fn [{:keys [field]}] (= field (.getName r)))
@@ -258,46 +261,48 @@
                facet-queries)))
 
 (defn extract-pivots
-  [query-results facet-date-ranges]
-  (let [facet-pivot (.getFacetPivot query-results)]
+  [^QueryResponse query-results facet-date-ranges]
+  (let [^NamedList facet-pivot (.getFacetPivot query-results)]
     (when facet-pivot
-      (merge
-       (into
-        {}
-        (map
-         (fn [index]
-           (let [facet1-name (.getName facet-pivot index)
-                 pivot-fields (.getVal facet-pivot index)
-                 ranges (into {}
-                              (for [pivot-field pivot-fields]
-                                (let [facet1-value (.getValue pivot-field)
-                                      facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
-                                  [facet1-value
-                                   (into {}
-                                         (map (fn [range]
-                                                [(:name range) (:values range)])
-                                              facet-ranges))])))]
-             [facet1-name ranges]))
-         (range 0 (.size facet-pivot))))
-       (into
-        {}
-        (map
-         (fn [index]
-           (let [facet1-name (.getName facet-pivot index)
-                 pivot-fields (.getVal facet-pivot index)
-                 pivots (into {}
-                              (for [pivot-field pivot-fields]
-                                (let [facet1-value (.getValue pivot-field)
-                                      pivot-values (.getPivot pivot-field)]
-                                  [facet1-value
-                                   (into {}
-                                         (map (fn [pivot]
-                                                [(.getValue pivot) (.getCount pivot)])
-                                              pivot-values))])))]
-             ;;(println facet1-name)
-             [facet1-name pivots]))
-         (range 0 (.size facet-pivot))))
-       ))))
+      (into
+       {}
+       (map
+        (fn [index]
+          (let [facet1-name (.getName facet-pivot index)
+                ^ArrayList pivot-fields (.getVal facet-pivot index)
+                ranges (into {}
+                             (for [^PivotField pivot-field pivot-fields
+                                   :let [facet1-value (.getValue pivot-field)
+                                         facet-ranges (extract-facet-ranges pivot-field facet-date-ranges)]
+                                   :when (not-empty facet-ranges)]
+                               [facet1-value
+                                (into {}
+                                      (map (fn [range]
+                                             [(:name range) (:values range)])
+                                           facet-ranges))]))
+                pivot-counts (into {}
+                                   (for [^PivotField pivot-field pivot-fields]
+                                     (let [facet1-value (.getValue pivot-field)
+                                           ^List pivot-values (.getPivot pivot-field)]
+                                       [facet1-value
+                                        (into {}
+                                              (map (fn [^PivotField pivot]
+                                                     (if (.getFacetRanges pivot)
+                                                       [(.getValue pivot)
+                                                        {:count (.getCount pivot)
+                                                         :ranges (extract-facet-ranges pivot facet-date-ranges)}]
+                                                       [(.getValue pivot)
+                                                        (.getCount pivot)]))
+                                                   pivot-values))])))]
+            ;;(println facet1-name)
+            [facet1-name (cond (and (not-empty ranges) (not-empty pivot-counts) (= (count ranges) (count pivot-counts)))
+                               {:counts pivot-counts :ranges ranges}
+                               (not-empty pivot-counts)
+                               pivot-counts
+                               (not-empty ranges)
+                               ranges
+                               :else nil)]))
+        (range 0 (.size facet-pivot)))))))
 
 (defn show-query
   [q flags]
@@ -322,7 +327,7 @@
     (when (not-empty other)
       (trace "  Other parameters to Solr:")
       (doseq [[k v] other]
-        (trace (format "  %s: %s" k v)))))
+        (trace (format "  %s: %s" k (pr-str v))))))
   )
 
 (defn search*

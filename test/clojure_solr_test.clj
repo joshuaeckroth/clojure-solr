@@ -38,7 +38,7 @@
 (deftest test-add-document!
   (do (add-document! sample-doc)
       (commit!))
-  (is (= sample-doc (first (search "my"))))
+  (is (= sample-doc (dissoc (first (search "my")) :_version_)))
   (is (= {:start 0 :rows-set 1 :rows-total 1} (select-keys (meta (search "my"))
                                                            [:start :rows-set :rows-total])))
   (is (= [{:name "terms"
@@ -64,7 +64,7 @@
 (deftest test-quoted-search
   (do (add-document! sample-doc)
       (commit!))
-  (is (= sample-doc (first (search "\"my fulltext\""))))
+  (is (= sample-doc (dissoc (first (search "\"my fulltext\"")) :_version_)))
   (is (empty? (search "\"fulltext my\""))))
 
 (deftest test-facet-query
@@ -178,8 +178,8 @@
     (is (= 1 (count pivot-fields)))
     (is (get pivot-fields "type"))
     (is (= 2 (count (get pivot-fields "type"))))
-    (is (= 1 (count (get-in pivot-fields ["type" "docx" "updated"]))))
-    (is (= 1 (:count (first (get-in pivot-fields ["type" "docx" "updated"])))))
-    (is (= 1 (count (get-in pivot-fields ["type" "pdf" "updated"]))))
-    (is (= 1 (:count (first (get-in pivot-fields ["type" "pdf" "updated"])))))
+    (is (= 1 (count (get-in pivot-fields ["type" :ranges "docx" "updated"]))))
+    (is (= 1 (:count (first (get-in pivot-fields ["type" :ranges "docx" "updated"])))))
+    (is (= 1 (count (get-in pivot-fields ["type" :ranges "pdf" "updated"]))))
+    (is (= 1 (:count (first (get-in pivot-fields ["type" :ranges "pdf" "updated"])))))
     #_(clojure.pprint/pprint (:facet-pivot-fields result))))
