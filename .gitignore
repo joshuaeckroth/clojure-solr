@@ -9,3 +9,5 @@ test-files/dist
 .lein*
 target/
 *.iml*~
+pom.xml.asc
+**/#*#
