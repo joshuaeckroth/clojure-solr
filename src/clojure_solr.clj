@@ -144,19 +144,21 @@
 (defn extract-facets
   [query-results facet-hier-sep limiting? formatters key-fields]
   (map (fn [^FacetField f]
-         {:name (get key-fields (.getName f) (.getName f))
-          :values (sort-by :path
-                           (map (fn [v]
-                                  (let [result
-                                        (merge
-                                         {:value (.getName v)
-                                          :count (.getCount v)}
-                                         (when-let [split-path (and facet-hier-sep (str/split (.getName v) facet-hier-sep))]
-                                           {:split-path split-path
-                                            :title (last split-path)
-                                            :depth (count split-path)}))]
-                                    ((get formatters (.getName f) identity) result)))
-                                (.getValues f)))})
+         (let [field-name (.getName f)
+               facet-name (get key-fields field-name field-name)]
+           {:name facet-name
+            :values (sort-by :path
+                             (map (fn [v]
+                                    (let [result
+                                          (merge
+                                           {:value (.getName v)
+                                            :count (.getCount v)}
+                                           (when-let [split-path (and facet-hier-sep (str/split (.getName v) facet-hier-sep))]
+                                             {:split-path split-path
+                                              :title (last split-path)
+                                              :depth (count split-path)}))]
+                                      ((get formatters facet-name identity) result)))
+                                  (.getValues f)))}))
        ^List (if limiting?
                (.getLimitingFacets query-results)
                (.getFacetFields query-results))))
