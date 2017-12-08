@@ -94,7 +94,7 @@
                                              :result-formatter #(update-in % [:value] clojure.string/lower-case)}]))]
     (is (not (empty? (:facet-fields result))))
     (is (= 3 (count (-> result :facet-fields first :values))))
-    (is (every? #(.startsWith (:value %) "vocabulary 1")
+    (is (every? #(.startsWith (:value %) "Vocabulary 1")
                 (-> result :facet-fields first :values)))))
 
 (deftest test-facet-ranges

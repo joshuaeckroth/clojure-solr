@@ -142,9 +142,9 @@
   (get http-methods method SolrRequest$METHOD/GET))
 
 (defn extract-facets
-  [query-results facet-hier-sep limiting? formatters]
+  [query-results facet-hier-sep limiting? formatters key-fields]
   (map (fn [^FacetField f]
-         {:name (.getName f)
+         {:name (get key-fields (.getName f) (.getName f))
           :values (sort-by :path
                            (map (fn [v]
                                   (let [result
@@ -330,6 +330,9 @@
         (trace (format "  %s: %s" k (pr-str v))))))
   )
 
+(def facet-exclude-parameters
+  #{:name :result-formatter})
+
 (defn search*
   "Query solr through solrj.
    q: Query field
@@ -377,7 +380,13 @@
         facet-result-formatters (into {} (map #(if (map? %)
                                                  [(:name %) (:result-formatter % identity)]
                                                  [% identity])
-                                              facet-fields))]
+                                              facet-fields))
+        facet-key-fields (into {} (map-indexed (fn [i f]
+                                                 [(format "f%d" i) (if (map? f) (:name f) (name f))])
+                                               facet-fields))
+        facet-field-keys (into {} (map-indexed (fn [i f]
+                                                 [(if (map? f) (:name f) (name f)) (format "f%d" i)])
+                                               facet-fields))]
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
       (.setParam query (apply str (rest (str key))) (make-param value)))
     (when (not (empty? fields))
@@ -391,15 +400,40 @@
                                             :else (throw (Exception. (format "Unsupported field name: %s" f)))))
                                     fields)))
             :else (throw (Exception. (format "Unsupported :fields parameter format: %s" fields)))))
-    (.addFacetField query
-                    (into-array String
-                                (map #(if (map? %) (:name %) (name %)) facet-fields)))
-    (doseq [facet-field facet-fields]
-      (when (map? facet-field)
-        (doseq [[key val] facet-field
-                :when (not= key :name)]
-          (.setParam query (format "f.%s.facet.%s" (:name facet-field) (name key))
-                     (into-array String [(str val)])))))
+
+    ;; How to facet the same attribute different ways (using different prefixes)
+    ;; https://stackoverflow.com/questions/31340400/multiple-facet-prefix-on-a-single-facet-field
+    ;; http://192.168.0.200:8983/solr/i2ksearch/select?facet.field={!key=f1%20facet.prefix="prefix1"}attribute&facet.field={!key=f2%20facet.prefix="prefix 2"}attribute&facet.limit=300&facet.query=attribute:<<query>>&facet=on&fq=attribute:<<query>>&rows=0
+
+    (let [facet-field-parameters
+          (for [facet-field facet-fields
+                :let [field-name (if (map? facet-field)
+                                   (:name facet-field)
+                                   (name facet-field))
+                      key (get facet-field-keys field-name)]]
+            (if (map? facet-field)
+              (let [local-params
+                    (reduce-kv (fn [params k v]
+                                 (if (facet-exclude-parameters k)
+                                   params
+                                   (format "%s facet.%s=\"%s\"" params (name k) v)))
+                               (format "!key=%s" key)
+                               facet-field)]
+                (format "{%s}%s" local-params field-name))
+              (format "{!key=%s}%s" key field-name)))]
+      (.addFacetField query (into-array String facet-field-parameters)))
+
+    ;; Subsumed by above.
+    #_(.addFacetField query
+                      (into-array String
+                                  (map #(if (map? %) (:name %) (name %)) facet-fields)))
+    #_(doseq [facet-field facet-fields]
+        (when (map? facet-field)
+          (doseq [[key val] facet-field
+                  :when (not= key :name)]
+            (.setParam query (format "f.%s.facet.%s" (:name facet-field) (name key))
+                       (into-array String [(str val)])))))
+
     (doseq [facet-query facet-queries]
       (cond (string? facet-query)
             (.addFacetQuery query facet-query)
@@ -480,9 +514,9 @@
           :rows-set (count results)
           :rows-total (.getNumFound results)
           :highlighting (.getHighlighting query-results)
-          :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters)
+          :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters facet-key-fields)
           :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
-          :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters)
+          :limiting-facet-fields (extract-facets query-results facet-hier-sep true facet-result-formatters facet-key-fields)
           :facet-queries (extract-facet-queries facet-queries (.getFacetQuery query-results))
           :facet-pivot-fields (extract-pivots query-results facet-date-ranges)
           :results-obj results
