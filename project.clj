@@ -1,4 +1,4 @@
-(defproject cc.artifice/clojure-solr "1.8.1"
+(defproject cc.artifice/clojure-solr "1.8.2"
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.apache.solr/solr-solrj "5.3.1"]
                  [org.apache.solr/solr-core "5.3.1" :exclusions [commons-fileupload]]
@@ -7,5 +7,5 @@
                  [clj-time "0.11.0" :exclusions [org.clojure/clojure]]]
   :profiles {:dev {:dependencies [[javax.servlet/servlet-api "2.5"]]}}
   ;;:repositories [["restlet" {:url "http://maven.restlet.org"}]]
-  :repositories [["restlet" {:url "http://repo.spring.io/libs-release-remote"}]]
+  :repositories [["restlet" {:url "https://repo.spring.io/libs-release-remote"}]]
   )

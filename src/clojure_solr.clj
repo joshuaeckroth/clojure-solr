@@ -18,7 +18,7 @@
            (org.apache.solr.client.solrj.embedded EmbeddedSolrServer)
            (org.apache.solr.client.solrj.response QueryResponse FacetField PivotField RangeFacet RangeFacet$Count RangeFacet$Date)
            (org.apache.solr.common SolrInputDocument)
-           (org.apache.solr.common.params ModifiableSolrParams CursorMarkParams)
+           (org.apache.solr.common.params ModifiableSolrParams CursorMarkParams MoreLikeThisParams)
            (org.apache.solr.common.util NamedList)
            (org.apache.solr.util DateMathParser)))
 
@@ -377,7 +377,9 @@
   [q {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
              facet-mincount facet-hier-sep facet-filters facet-pivot-fields cursor-mark] :as flags}]
   (show-query q flags)
-  (let [query (SolrQuery. q)
+  (let [query (cond (string? q) (SolrQuery. q)
+                    (instance? SolrQuery q) q
+                    :else (throw (Exception. "q parameter must be a string or SolrQuery")))
         method (parse-method method)
         facet-result-formatters (into {} (map #(if (map? %)
                                                  [(:name %) (:result-formatter % identity)]
@@ -423,18 +425,8 @@
                                facet-field)]
                 (format "{%s}%s" local-params field-name))
               (format "{!key=%s}%s" key field-name)))]
-      (.addFacetField query (into-array String facet-field-parameters)))
-
-    ;; Subsumed by above.
-    #_(.addFacetField query
-                      (into-array String
-                                  (map #(if (map? %) (:name %) (name %)) facet-fields)))
-    #_(doseq [facet-field facet-fields]
-        (when (map? facet-field)
-          (doseq [[key val] facet-field
-                  :when (not= key :name)]
-            (.setParam query (format "f.%s.facet.%s" (:name facet-field) (name key))
-                       (into-array String [(str val)])))))
+      (when (not-empty facet-field-parameters)
+        (.addFacetField query (into-array String facet-field-parameters))))
 
     (doseq [facet-query facet-queries]
       (cond (string? facet-query)
@@ -580,7 +572,6 @@
       (.addField document (name attribute) (doto (HashMap. 1) (.put (name func) value))))
     (.add *connection* document)))
   
-
 (defn similar [doc similar-count & {:keys [method]}]
   (let [query (SolrQuery. (format "id:%d" (:id doc)))
         method (parse-method method)]
@@ -589,6 +580,72 @@
     (.setParam query "mlt.count" (make-param similar-count))
     (let [query-results (.query *connection* query method)]
       (map doc-to-hash (.get (.get (.getResponse query-results) "moreLikeThis") (str (:id doc)))))))
+
+(defn more-like-this
+  "Execute a Solr moreLikeThis (mlt) query.  
+   id: unique id of doc to match.
+   unique-key: Name of key in schema that corresponds to id.
+   similarity-fields: Fields to match against.  Pass as comma-separated list or vector.
+   params: Map of optional parameters:
+     match-include? -- this is not clearly documented.  See Solr manual.
+     min-doc-freq -- ignore words that don't occur in at least this many docs.  Default 3.
+     min-term-freq -- ignore terms that occur fewer times than this in a document. Default 2.
+     min-word-len -- minimum word length for matching.  Default 5.
+     boost? -- Specifies if query will be boosted by interesting term relevance.  Default true.
+     max-query-terms -- Maximum number of query terms in a search.  Default 1000.
+     max-results -- Maximum number of similar docs returned.  Default 5.
+     fields -- fields of docs to return.  Pass as vector or comma-separated list..  Default: unique key + score.  
+     method -- Solr Query method.
+   Other key/value pairs can be passed in params and are passed onto search*, so can be used
+   for filtering."
+  [id unique-key similarity-fields
+   {:keys [match-include?
+           min-doc-freq
+           min-term-freq
+           min-word-len
+           boost?
+           max-query-terms
+           max-results
+           fields
+           method]
+    :or {match-include? false
+         min-doc-freq (int 3)
+         min-term-freq (int 2)
+         min-word-len (int 5)
+         boost? true
+         max-results (int 5)
+         fields "score"
+         max-query-terms (int 1000)}
+    :as params}]
+  (let [query (doto (SolrQuery.)
+                (.setRequestHandler  (str "/" MoreLikeThisParams/MLT))
+                (.set MoreLikeThisParams/MATCH_INCLUDE (make-param match-include?))
+                (.set MoreLikeThisParams/MIN_DOC_FREQ (make-param min-doc-freq))
+                (.set MoreLikeThisParams/MIN_TERM_FREQ (make-param min-term-freq))
+                (.set MoreLikeThisParams/MIN_WORD_LEN (make-param min-word-len))
+                (.set MoreLikeThisParams/BOOST (make-param boost?))
+                (.set MoreLikeThisParams/MAX_QUERY_TERMS (make-param max-query-terms))
+                (.set MoreLikeThisParams/SIMILARITY_FIELDS (make-param (if (string? similarity-fields)
+                                                                         similarity-fields
+                                                                         (str/join "," similarity-fields))))
+                (.setQuery (format "%s:\"%s\"" (name unique-key) (str id)))
+                (.set "fl" (make-param (format "%s,%s" (name unique-key)
+                                               (if (string? fields)
+                                                 fields
+                                                 (str/join "," fields)))))
+                (.setRows max-results))
+        query-results (search* query
+                               (dissoc params
+                                       :match-include?
+                                       :min-doc-freq
+                                       :min-term-freq
+                                       :min-word-len
+                                       :boost?
+                                       :fields
+                                       :max-query-terms
+                                       :max-results
+                                       :method))]
+    (map doc-to-hash (:results-obj (meta query-results)))))
 
 (defn delete-id! [id]
   (.deleteById *connection* id))
