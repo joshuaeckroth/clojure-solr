@@ -96,8 +96,8 @@ Usage
     body: query operation.
     
   ::
-    (with-trace 
-    (fn [str] (debug [str])) 
+  
+    (with-trace (fn [str] (debug [str])) 
       (with-connection...
         (search... )))
  
