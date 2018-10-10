@@ -27,19 +27,22 @@ Usage
 - Basic usage  
 
   ::
-    (with-connection (connect "http://127.0.0.1:8983/solr")
-      (add-document! {"id" "testdoc", "name" "A Test Document"})
-      (add-documents! [{"id" "testdoc.2", "name" "Another test"}
+  
+      (with-connection (connect "http://127.0.0.1:8983/solr")
+        (add-document! {"id" "testdoc", "name" "A Test Document"})
+        (add-documents! [{"id" "testdoc.2", "name" "Another test"}
                                  {"id" "testdoc.3", "name" "a final test"}])
-      (commit!)
-      (search "test")
-      (search "test" :rows 2))
+        (commit!)
+        (search "test")
+        (search "test" :rows 2))
 
 - Advanced Usage
+ 
   - Parameters can be passed as a map, that contains Solr parameter names as keywords e.g (start, fields, facet-filters, etc..)
 
   ::
-    Optional keys, passed in a map:
+
+      Optional keys, passed in a map:
       :method :get or :post (default :get)
       :rows Number of rows to return (default is Solr default: 1000)
       :start Offset into query result at which to start returning rows (default 0)
@@ -63,34 +66,40 @@ Usage
       :facet-pivot-fields Vector of pivots to compute, each a list of facet fields. If a facet is tagged (e.g., {:tag ts} in :facet-date-ranges) then the string should be {!range=ts}other-facet.  Otherwise, use comma separated lists: this-facet,other-facet.
 
   ::
+  
     (with-connection...
       (search "query" {:rows 10, :start 0 :fields <vector-of-fieldnames> :facet-filters {:name "facet-name" :value "facet-value" :formatter (fn...)}) 
-    ;; formatter is optional and used to format the query.
+      ;; formatter is optional and used to format the query.
 
 - Optionally use a connection manager 
+  
   - (hint: Use PoolingHttpClientConnectionManager when clojure-solr is used in a web server to query Solr in a multithreaded environment, to avoid creating thousands of dangling CLOSE_WAIT sockets.)
 
   ::
-  (with-connection (connect <url> <connection-manager>)
-   ;; connection operations...
+    
+    (with-connection (connect <url> <connection-manager>)
+    ;; connection operations...
   
 - Atomically update a document. 
   ::
     doc: can be a document previously fetched from solr or the id of such a document
     unique-key: Name of the attribute that is the document's unique key.
     changes: a vector of maps containg :attribute, :func (:set, :inc, :add) and :value. 
+  
   ::
+  
     (atomically-update! doc \"some-key"\ [{:attribute :client :func :set :value \"some-client-value\"}])
  
 - Debug queries
   ::
     trace function: a function to "debug" query
     body: query operation.
+    
   ::
     (with-trace 
-    (fn [str] (debug [str]))
-    (with-connection...
-    (search... )))
+    (fn [str] (debug [str])) 
+      (with-connection...
+        (search... )))
  
 - More Like this
   ::
@@ -108,5 +117,8 @@ Usage
       max-results -- Maximum number of similar docs returned.  Default 5.                                               
       fields -- fields of docs to return.  Pass as vector or comma-separated list..  Default: unique key + score.       
       method -- Solr Query method
+
+
   ::
+  
     (more-like-this doc-id doc-id-name [fields..] {:min-doc-freq 4 :min-word-len 6 :max-results 10 ...})  
