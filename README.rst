@@ -27,17 +27,17 @@ Usage
 - Basic usage  
 
   ::
-
-  (with-connection (connect "http://127.0.0.1:8983/solr")
-    (add-document! {"id" "testdoc", "name" "A Test Document"})
-    (add-documents! [{"id" "testdoc.2", "name" "Another test"}
+    (with-connection (connect "http://127.0.0.1:8983/solr")
+      (add-document! {"id" "testdoc", "name" "A Test Document"})
+      (add-documents! [{"id" "testdoc.2", "name" "Another test"}
                                  {"id" "testdoc.3", "name" "a final test"}])
-    (commit!)
-    (search "test")
-    (search "test" :rows 2))
+      (commit!)
+      (search "test")
+      (search "test" :rows 2))
 
 - Advanced Usage
   - Parameters can be passed as a map, that contains Solr parameter names as keywords e.g (start, fields, facet-filters, etc..)
+
   ::
     Optional keys, passed in a map:
       :method :get or :post (default :get)
@@ -64,7 +64,7 @@ Usage
 
   ::
     (with-connection...
-    (search "query" {:rows 10, :start 0 :fields <vector-of-fieldnames> :facet-filters {:name "facet-name" :value "facet-value" :formatter (fn...)}) 
+      (search "query" {:rows 10, :start 0 :fields <vector-of-fieldnames> :facet-filters {:name "facet-name" :value "facet-value" :formatter (fn...)}) 
     ;; formatter is optional and used to format the query.
 
 - Optionally use a connection manager 
@@ -79,7 +79,6 @@ Usage
     doc: can be a document previously fetched from solr or the id of such a document
     unique-key: Name of the attribute that is the document's unique key.
     changes: a vector of maps containg :attribute, :func (:set, :inc, :add) and :value. 
-
   ::
     (atomically-update! doc \"some-key"\ [{:attribute :client :func :set :value \"some-client-value\"}])
  
@@ -89,9 +88,9 @@ Usage
     body: query operation.
   ::
     (with-trace 
-      (fn [str] (debug [str]))
-      (with-connection...
-        (search... )))
+    (fn [str] (debug [str]))
+    (with-connection...
+    (search... )))
  
 - More Like this
   ::
