@@ -83,7 +83,7 @@
         {:keys [clean-url name password]} (get-url-details url)
         builder (doto (HttpClientBuilder/create)
                   (.setDefaultCredentialsProvider credentials-provider)
-                  (.setConnectionManager (when conn-manager conn-manager))
+                  (.setConnectionManager (when conn-manager (first conn-manager)))
                   (.addInterceptorFirst 
                    (reify 
                      HttpRequestInterceptor
