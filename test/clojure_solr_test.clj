@@ -5,7 +5,8 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.coerce :as tcoerce])
   (:use [clojure.test])
-  (:use [clojure-solr]))
+  (:use [clojure-solr])
+  (:use [clojure-solr.schema]))
 
 ;; from: https://gist.github.com/edw/5128978
 (defn delete-recursively [fname]
@@ -183,3 +184,14 @@
     (is (= 1 (count (get-in pivot-fields ["type" :ranges "pdf" "updated"]))))
     (is (= 1 (:count (first (get-in pivot-fields ["type" :ranges "pdf" "updated"])))))
     #_(clojure.pprint/pprint (:facet-pivot-fields result))))
+
+
+
+(deftest test-luke-schema
+  (add-document! sample-doc)
+  (add-document! (assoc sample-doc :id 2 :type "docx"))
+  (commit!)
+  (let [fields (get-fields-via-luke)]
+    (is (not-empty fields))
+    (is (map? (get fields "fulltext")))
+    (is (set? (get-in fields ["fulltext" :schema])))))
