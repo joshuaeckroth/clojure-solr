@@ -11,3 +11,4 @@ target/
 *.iml*~
 pom.xml.asc
 **/#*#
+**/*~

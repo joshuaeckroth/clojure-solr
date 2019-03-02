@@ -78,11 +78,12 @@
             (swap! credentials assoc host {:name name :password password})))
         details))))
 
-(defn connect [url]
+(defn connect [url & conn-manager]
   (let [params (ModifiableSolrParams.)
         {:keys [clean-url name password]} (get-url-details url)
         builder (doto (HttpClientBuilder/create)
                   (.setDefaultCredentialsProvider credentials-provider)
+                  (.setConnectionManager (when conn-manager (first conn-manager)))
                   (.addInterceptorFirst 
                    (reify 
                      HttpRequestInterceptor
