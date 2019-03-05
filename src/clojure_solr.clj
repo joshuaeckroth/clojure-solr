@@ -260,7 +260,7 @@
                                                   :value (format (if date-range? "[* TO %s]" "[* TO %s}")
                                                                  (format-range-value (.getStart r) nil true))
                                                   :min-inclusive nil
-                                                  :max-noninclusive (format-range-value (.getStart r) timezone false)}]
+                                                  :max-noninclusive (.getStart r)}]
                                                 values)
                                         values)
                         values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
@@ -268,7 +268,7 @@
                                                       [{:count (.getAfter r)
                                                         :value (format "[%s TO *]"
                                                                        (format-range-value (.getEnd r) nil false))
-                                                        :min-inclusive (format-range-value (.getEnd r) timezone false)
+                                                        :min-inclusive (.getEnd r)
                                                         :max-noninclusive nil}])
                                               values-before)]
                     {:name   (.getName r)
