@@ -431,6 +431,8 @@
      <str name="echoHandler">true</str>
     </lst>
   </requestHandler>
+
+<requestHandler name="/admin/luke" class="org.apache.solr.handler.admin.LukeRequestHandler" />
   
   <highlighting>
    <!-- Configure the standard fragmenter -->

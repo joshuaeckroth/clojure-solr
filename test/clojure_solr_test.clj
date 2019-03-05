@@ -5,7 +5,8 @@
   (:require [clj-time.core :as t])
   (:require [clj-time.coerce :as tcoerce])
   (:use [clojure.test])
-  (:use [clojure-solr]))
+  (:use [clojure-solr])
+  (:use [clojure-solr.schema]))
 
 ;; from: https://gist.github.com/edw/5128978
 (defn delete-recursively [fname]
@@ -127,14 +128,14 @@
             [{:count 1,
               :value "[* TO 9}",
               :min-inclusive nil,
-              :max-noninclusive "9"}
-             {:max-noninclusive "12",
-              :min-inclusive "9",
+              :max-noninclusive 9}
+             {:max-noninclusive 12,
+              :min-inclusive 9,
               :value "[9 TO 12}",
               :count 3}
              {:count 1,
               :value "[12 TO *]",
-              :min-inclusive "12",
+              :min-inclusive 12,
               :max-noninclusive nil}],
             :start 9,
             :end 12,
@@ -143,9 +144,9 @@
             :after 1}
            (some #(and (= (:name %) "numeric") %) (:facet-range-fields result))))
     (is (= {:name   "updated"
-            :values [{:min-inclusive    "2015-02-26T06:00:00Z"
-                      :max-noninclusive "2015-02-27T05:59:59Z"
-                      :value            "[2015-02-26T06:00:00Z TO 2015-02-27T05:59:59Z]",
+            :values [{:min-inclusive    (tcoerce/to-date "2015-02-26T06:00:00Z")
+                      :max-noninclusive (tcoerce/to-date "2015-02-27T06:00:00Z")
+                      :value            "[2015-02-26T06:00:00Z TO 2015-02-27T06:00:00Z}",
                       :count            5}]
             :start  (tcoerce/to-date (t/from-time-zone (t/date-time 2015 02 26)
                                                        (t/time-zone-for-id "America/Chicago")))
@@ -183,3 +184,14 @@
     (is (= 1 (count (get-in pivot-fields ["type" :ranges "pdf" "updated"]))))
     (is (= 1 (:count (first (get-in pivot-fields ["type" :ranges "pdf" "updated"])))))
     #_(clojure.pprint/pprint (:facet-pivot-fields result))))
+
+
+
+(deftest test-luke-schema
+  (add-document! sample-doc)
+  (add-document! (assoc sample-doc :id 2 :type "docx"))
+  (commit!)
+  (let [fields (get-fields-via-luke)]
+    (is (not-empty fields))
+    (is (map? (get fields "fulltext")))
+    (is (set? (get-in fields ["fulltext" :schema])))))

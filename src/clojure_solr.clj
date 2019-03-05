@@ -170,7 +170,36 @@
 (def query-result-date-time-parser
   (tformat/formatter t/utc "YYYY-MM-dd'T'HH:mm:ss.SSS'Z'" "YYYY-MM-dd'T'HH:mm:ss'Z'"))
 
-(defn format-range-value
+(defmulti parse-range-value (fn [str start] (type start)))
+
+(defmethod parse-range-value java.lang.Integer [str start] (Integer/parseInt str))
+(defmethod parse-range-value java.lang.Long [str start] (Long/parseLong str))
+(defmethod parse-range-value java.lang.Float [str start] (Float/parseFloat str))
+(defmethod parse-range-value java.lang.Double [str start] (Double/parseDouble str))
+(defmethod parse-range-value java.util.Date [str start] (tcoerce/to-date (tcoerce/from-string str)))
+(defmethod parse-range-value :default [str start] str)
+
+(defmulti format-range-value (fn [val timezone end?] (type val)))
+
+(defmethod format-range-value java.util.Date [val timezone end?]
+  (let [d (tcoerce/from-date val)]
+    (tformat/unparse (if timezone (tformat/with-zone date-time-formatter timezone) date-time-formatter)
+                     (if end? (t/minus d (t/seconds 1)) d))))
+
+(defmethod format-range-value org.joda.time.DateTime [val timezone end?]
+  (tformat/unparse (if timezone (tformat/with-zone date-time-formatter timezone) date-time-formatter)
+                     (if end? (t/minus val (t/seconds 1)) val)))
+
+(defmethod format-range-value java.lang.String [val timezone end?]
+  (try (let [d (tformat/parse date-time-formatter val)]
+         (format-range-value d timezone end?))
+       (catch Exception _
+         val)))
+       
+(defmethod format-range-value :default [val timezone end?] val)
+
+
+#_(defn format-range-value
   "Timezone is only used if it's a date facet (and timezone is not null)."
   [val timezone end?]
   (let [d (try (tformat/parse date-time-formatter val)
@@ -207,31 +236,31 @@
                         timezone (:timezone (first (filter (fn [{:keys [field]}] (= field (.getName r)))
                                                            facet-date-ranges)))
                         gap (.getGap r)
+                        attribute-type (type gap)
                         values
                         (map (fn [val]
-                               (let [start-val (.getValue val)
+                               (let [start-val (parse-range-value (.getValue val) (.getStart r))
                                      start-str (format-range-value start-val nil false)
                                      end-val (cond date-range?
                                                    (.parseMath (doto (DateMathParser.)
                                                                  (.setNow
-                                                                  (tcoerce/to-date
-                                                                   (tformat/parse query-result-date-time-parser start-val))))
+                                                                  start-val #_(tcoerce/to-date
+                                                                               (tformat/parse query-result-date-time-parser start-val))))
                                                                gap)
-                                                   (re-matches #"\d+" start-val)
-                                                   (+ (Integer/parseInt start-val) gap)
-                                                   :else (+ (Double/parseDouble start-val) gap))
-                                     end-str (format-range-value end-val nil true)]
+                                                   :else (+ start-val gap))
+                                     end-str (format-range-value end-val nil false)]
                                  {:count (.getCount val)
-                                  :value (format (if date-range? "[%s TO %s]" "[%s TO %s}") start-str end-str)
-                                  :min-inclusive start-str
-                                  :max-noninclusive end-str}))
+                                  :value (format "[%s TO %s}" start-str end-str)
+                                  ;;:value (format (if date-range? "[%s TO %s]" "[%s TO %s}") start-str end-str)
+                                  :min-inclusive start-val
+                                  :max-noninclusive end-val}))
                              (.getCounts r))
                         values-before (if (and (.getBefore r) (> (.getBefore r) 0))
                                         (concat [{:count (.getBefore r)
                                                   :value (format (if date-range? "[* TO %s]" "[* TO %s}")
                                                                  (format-range-value (.getStart r) nil true))
                                                   :min-inclusive nil
-                                                  :max-noninclusive (format-range-value (.getStart r) timezone true)}]
+                                                  :max-noninclusive (.getStart r)}]
                                                 values)
                                         values)
                         values-before-after (if (and (.getAfter r) (> (.getAfter r) 0))
@@ -239,7 +268,7 @@
                                                       [{:count (.getAfter r)
                                                         :value (format "[%s TO *]"
                                                                        (format-range-value (.getEnd r) nil false))
-                                                        :min-inclusive (format-range-value (.getEnd r) timezone false)
+                                                        :min-inclusive (.getEnd r)
                                                         :max-noninclusive nil}])
                                               values-before)]
                     {:name   (.getName r)
@@ -481,6 +510,7 @@
     (let [query-results (.query *connection* query method)
           results (.getResults query-results)]
       (trace "Query complete")
+      (trace query-results)
       (when (:debugQuery flags)
         (trace (.getDebugMap query-results)))
       (with-meta (map doc-to-hash results)
@@ -505,9 +535,9 @@
                             :count (.getCount info)
                             :missing (.getMissing info)
                             }]))})
-         {:start (.getStart results)
+         {:start (when results (.getStart results))
           :rows-set (count results)
-          :rows-total (.getNumFound results)
+          :rows-total (when results (.getNumFound results))
           :highlighting (.getHighlighting query-results)
           :facet-fields (extract-facets query-results facet-hier-sep false facet-result-formatters facet-key-fields)
           :facet-range-fields (extract-facet-ranges query-results facet-date-ranges)
