@@ -27,7 +27,7 @@
     (.load cont)
     (binding [*connection* (EmbeddedSolrServer. cont "clojure-solr")]
       (f)
-      (.shutdown *connection*))))
+      (.close *connection*))))
 
 (use-fixtures :each solr-server-fixture)
 
