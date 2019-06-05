@@ -195,3 +195,20 @@
     (is (not-empty fields))
     (is (map? (get fields "fulltext")))
     (is (set? (get-in fields ["fulltext" :schema])))))
+
+(deftest test-edismax-disjunction
+  (add-document! (assoc sample-doc :id 1 :fulltext "This is a clinical trial."))
+  (add-document! (assoc sample-doc :id 2 :fulltext "This is a clinical study."))
+  (add-document! (assoc sample-doc :id 3 :fulltext "This is a clinical trial and a clinical study."))
+  (commit!)
+  (let [ct (search* "\"clinical trial\"" {:qf "fulltext" :defType "edismax" :fl "id" :mm "2<-25%"})
+        cs (search* "\"clinical study\"" {:qf "fulltext" :defType "edismax" :fl "id" :mm "2<-25%"})
+        cts (search* "\"clinical trial\" OR \"clinical study\"" {:qf "fulltext" :defType "edismax" :fl "id" :mm "2<-25%"})]
+    (is (= 2 (count ct)))
+    (is (= #{"1" "3"} (set (map :id ct))))
+    (is (= 2 (count cs)))
+    (is (= #{"2" "3"} (set (map :id cs))))
+    (is (= 1 (count cts)))
+    (is (= "3" (:id (first cts))))))
+        
+  
