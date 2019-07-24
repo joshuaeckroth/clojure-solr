@@ -100,7 +100,7 @@
     (HttpSolrClient. clean-url client)))
 
 (defn- make-document [boost-map doc]
-  (let [sdoc (SolrInputDocument.)]
+  (let [sdoc (SolrInputDocument. (make-array String 0))]
     (doseq [[key value] doc]
       (let [key-string (name key)
             boost (get boost-map key)]
@@ -355,6 +355,11 @@
     (doseq [ff (:facet-fields flags)]
       (trace (format "    %s" (if (map? ff) (pr-str ff) ff))))
     (trace "    none"))
+  (trace "  Facet Numeric Ranges")
+  (if (not-empty (:facet-numeric-ranges flags))
+    (doseq [ff (:facet-numeric-ranges flags)]
+      (trace (format "    start: %s gap: %s end: %s" (:start ff) (:gap ff) (:end ff))))
+    (trace "    none"))
   (let [other (dissoc flags :facet-filters :facet-qieries :facet-fields)]
     (when (not-empty other)
       (trace "  Other parameters to Solr:")
@@ -597,7 +602,7 @@
    e.g.
      (atomically-update! doc \"cdid\" [{:attribute :client :func :set :value \"darcy\"}])"
   [doc unique-key-field changes]
-  (let [document (SolrInputDocument.)]
+  (let [document (SolrInputDocument. (make-array String 0))]
     (.addField document (name unique-key-field) (if (map? doc) (get doc unique-key-field) doc))
     (doseq [{:keys [attribute func value]} changes]
       (.addField document (name attribute) (doto (HashMap. 1) (.put (name func) value))))
