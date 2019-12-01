@@ -343,7 +343,7 @@
   (trace "  Facet filters:")
   (if (not-empty (:facet-filters flags))
     (doseq [ff (:facet-filters flags)]
-      (trace (format "    %s" (format-facet-query ff))))
+      (trace (format "    %s" (pr-str (format-facet-query ff)))))
     (trace "    none"))
   (trace "  Facet queries:")
   (if (not-empty (:facet-queries flags))
@@ -411,7 +411,8 @@
   Use (meta result) to get facet data."
   [q {:keys [method fields facet-fields facet-date-ranges facet-numeric-ranges facet-queries
              facet-mincount facet-hier-sep facet-filters facet-pivot-fields cursor-mark] :as flags}]
-  (show-query q flags)
+  (when *trace-fn*
+    (show-query q flags))
   (let [query (cond (string? q) (SolrQuery. q)
                     (instance? SolrQuery q) q
                     :else (throw (Exception. "q parameter must be a string or SolrQuery")))
@@ -427,7 +428,7 @@
                                                  [(if (map? f) (:name f) (name f)) (format "f%d" i)])
                                                facet-fields))]
     (doseq [[key value] (dissoc flags :method :facet-fields :facet-date-ranges :facet-numeric-ranges :facet-filters)]
-      (.setParam query (apply str (rest (str key))) (make-param value)))
+      (.setParam query (name key) (make-param value)))
     (when (not (empty? fields))
       (cond (string? fields)
             (.setFields query (into-array (str/split fields #",")))
